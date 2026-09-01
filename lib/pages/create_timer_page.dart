@@ -1,120 +1,218 @@
 import 'package:flutter/material.dart';
 
-import '../models/timer_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_buttons.dart';
+import '../widgets/cards.dart';
 import '../widgets/duration_picker_card.dart';
 
 class CreateTimerPage extends StatefulWidget {
-  const CreateTimerPage(
-      {super.key, required this.palette, required this.initialSeconds});
+  const CreateTimerPage({
+    super.key,
+    required this.onSave,
+  });
 
-  final AppPalette palette;
-  final int initialSeconds;
+  final Future<void> Function(String name, int seconds) onSave;
 
   @override
   State<CreateTimerPage> createState() => _CreateTimerPageState();
 }
 
 class _CreateTimerPageState extends State<CreateTimerPage> {
-  late int _hours;
-  late int _minutes;
-  late int _seconds;
-  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _controller = TextEditingController();
+  int _seconds = 5 * 60;
 
   @override
   void initState() {
     super.initState();
-    _hours = widget.initialSeconds ~/ 3600;
-    _minutes = (widget.initialSeconds % 3600) ~/ 60;
-    _seconds = widget.initialSeconds % 60;
+    _controller.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _controller.dispose();
     super.dispose();
-  }
-
-  int get _totalSeconds => _hours * 3600 + _minutes * 60 + _seconds;
-
-  void _save() {
-    if (_totalSeconds <= 0) return;
-    Navigator.of(context).pop(
-      SavedTimer(
-        name: _nameController.text.trim().isEmpty
-            ? '自定义倒计时'
-            : _nameController.text.trim(),
-        seconds: _totalSeconds,
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
+    return _EditorScaffold(
+      title: '创建倒计时',
+      canSave: true,
+      onSave: _save,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('选择倒计时时长', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 18),
+          DurationPickerCard(
+            seconds: _seconds,
+            onChanged: (int value) => setState(() => _seconds = value),
+          ),
+          const SizedBox(height: 28),
+          Text('倒计时名称', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 14),
+          _InputCard(
+            controller: _controller,
+            hint: '例如：煮鸡蛋',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    final String name =
+        _controller.text.trim().isEmpty ? '倒计时' : _controller.text.trim();
+    await widget.onSave(name, _seconds);
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+}
+
+class AddLabelPage extends StatefulWidget {
+  const AddLabelPage({
+    super.key,
+    required this.onSave,
+  });
+
+  final Future<void> Function(String label) onSave;
+
+  @override
+  State<AddLabelPage> createState() => _AddLabelPageState();
+}
+
+class _AddLabelPageState extends State<AddLabelPage> {
+  final TextEditingController _controller = TextEditingController();
+
+  bool get _canSave => _controller.text.trim().isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _EditorScaffold(
+      title: '添加标签',
+      canSave: _canSave,
+      onSave: _save,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('标签名称', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 14),
+          _InputCard(
+            controller: _controller,
+            hint: '例如：阅读',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    if (!_canSave) {
+      return;
+    }
+    await widget.onSave(_controller.text.trim());
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+}
+
+class _EditorScaffold extends StatelessWidget {
+  const _EditorScaffold({
+    required this.title,
+    required this.child,
+    required this.canSave,
+    required this.onSave,
+  });
+
+  final String title;
+  final Widget child;
+  final bool canSave;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.pinkBg,
+      backgroundColor: context.timerPalette.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 42, 24, 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+            children: <Widget>[
               Row(
-                children: [
-                  CapsuleButton(
-                      label: '取消',
-                      onPressed: () => Navigator.of(context).pop()),
-                  const Spacer(),
-                  const Text('创建倒计时', style: AppText.navTitle),
-                  const Spacer(),
-                  CapsuleButton(
-                      label: '保存',
-                      onPressed: _totalSeconds > 0 ? _save : null,
-                      disabled: _totalSeconds <= 0),
+                children: <Widget>[
+                  PlainTextButton(
+                    label: '取消',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                  ),
+                  PlainTextButton(
+                    label: '保存',
+                    enabled: canSave,
+                    onPressed: onSave,
+                  ),
                 ],
               ),
-              const SizedBox(height: 86),
-              const Text('选择倒计时时长', style: AppText.section),
-              const SizedBox(height: 28),
-              WheelPickerPanel(
-                palette: widget.palette,
-                hours: _hours,
-                minutes: _minutes,
-                seconds: _seconds,
-                onHoursChanged: (value) => setState(() => _hours = value),
-                onMinutesChanged: (value) => setState(() => _minutes = value),
-                onSecondsChanged: (value) => setState(() => _seconds = value),
+              const SizedBox(height: 34),
+              Expanded(
+                child: SingleChildScrollView(child: child),
               ),
-              const SizedBox(height: 52),
-              const Text('倒计时名称', style: AppText.section),
-              const SizedBox(height: 22),
-              TextField(
-                controller: _nameController,
-                textInputAction: TextInputAction.done,
-                style: AppText.input,
-                decoration: InputDecoration(
-                  hintText: '例如：煮鸡蛋',
-                  hintStyle: AppText.inputHint,
-                  filled: true,
-                  fillColor: AppColors.pinkBg,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(26),
-                    borderSide:
-                        BorderSide(color: widget.palette.softBorder, width: 2),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(26),
-                    borderSide:
-                        BorderSide(color: widget.palette.color, width: 2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 80),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InputCard extends StatelessWidget {
+  const _InputCard({required this.controller, required this.hint});
+
+  final TextEditingController controller;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+      color: Colors.white.withOpacity(0.74),
+      child: TextField(
+        controller: controller,
+        minLines: 1,
+        maxLines: 1,
+        style: const TextStyle(
+          color: AppTheme.ink,
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            color: Color(0xFFD7C9D3),
+            fontWeight: FontWeight.w700,
+          ),
+          border: InputBorder.none,
         ),
       ),
     );

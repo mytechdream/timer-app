@@ -2,101 +2,168 @@ import 'package:flutter/material.dart';
 
 import '../models/timer_models.dart';
 import '../theme/app_theme.dart';
+import '../utils/time_format.dart';
 import '../widgets/app_page.dart';
+import '../widgets/cards.dart';
 import '../widgets/segmented_pill.dart';
 import '../widgets/stats_row.dart';
 
-class InsightsPage extends StatelessWidget {
-  const InsightsPage({super.key, required this.palette});
+class InsightsPage extends StatefulWidget {
+  const InsightsPage({
+    super.key,
+    required this.history,
+  });
 
-  final AppPalette palette;
+  final List<TimerHistoryEntry> history;
+
+  @override
+  State<InsightsPage> createState() => _InsightsPageState();
+}
+
+class _InsightsPageState extends State<InsightsPage> {
+  int _periodIndex = 0;
+
+  int get _totalSeconds => widget.history.fold<int>(
+        0,
+        (int total, TimerHistoryEntry entry) => total + entry.durationSeconds,
+      );
 
   @override
   Widget build(BuildContext context) {
-    const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-    final numbers = List<int>.generate(30, (index) => index + 1);
-
     return AppPage(
+      title: '数据洞察',
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SegmentedPill(
+              items: const <String>['周', '月', '年'],
+              selectedIndex: _periodIndex,
+              onChanged: (int index) => setState(() => _periodIndex = index),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              _periodIndex == 0 ? '2026年8月30日 - 5日' : '2026年9月',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 18),
+            _CalendarCard(selectedPeriod: _periodIndex),
+            const SizedBox(height: 24),
+            StatsRow(
+              items: <StatItem>[
+                StatItem('累计时长', _summaryDuration(_totalSeconds)),
+                StatItem('累计次数', '${widget.history.length}'),
+                StatItem(
+                  '日平均',
+                  _summaryDuration(
+                      widget.history.isEmpty ? 0 : _totalSeconds ~/ 7),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _summaryDuration(int seconds) {
+    if (seconds < 60) {
+      return '$seconds秒';
+    }
+    return formatDigitalTime(seconds);
+  }
+}
+
+class _CalendarCard extends StatelessWidget {
+  const _CalendarCard({required this.selectedPeriod});
+
+  final int selectedPeriod;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color primary = Theme.of(context).colorScheme.primary;
+    const List<String> weekdays = <String>[
+      '周日',
+      '周一',
+      '周二',
+      '周三',
+      '周四',
+      '周五',
+      '周六'
+    ];
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('数据洞察', style: AppText.title),
-          const SizedBox(height: 70),
-          SegmentedPill(
-              labels: const ['周', '月', '年'], selected: 0, onSelected: (_) {}),
-          const SizedBox(height: 52),
+        children: <Widget>[
           Row(
-            children: [
-              const Expanded(
-                  child: Text('2026年8月30日 - 5日', style: AppText.large)),
-              Icon(Icons.expand_less_rounded, color: palette.color, size: 34),
-              const SizedBox(width: 20),
-              Icon(Icons.chevron_left_rounded, color: palette.color, size: 34),
-              const SizedBox(width: 20),
-              Icon(Icons.chevron_right_rounded, color: palette.color, size: 34),
-            ],
-          ),
-          const SizedBox(height: 54),
-          Row(
-            children: [
-              const Text('2026年9月', style: AppText.large),
-              const SizedBox(width: 12),
-              Icon(Icons.chevron_right_rounded, color: palette.color, size: 42),
+            children: <Widget>[
+              Text('2026年9月', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right_rounded, color: primary),
               const Spacer(),
-              Icon(Icons.chevron_left_rounded, color: palette.color, size: 32),
-              const SizedBox(width: 24),
-              const Icon(Icons.chevron_right_rounded,
-                  color: AppColors.mutedText, size: 32),
+              Icon(Icons.chevron_left_rounded, color: primary, size: 20),
+              const SizedBox(width: 10),
+              Icon(Icons.chevron_right_rounded, color: primary, size: 20),
             ],
           ),
-          const SizedBox(height: 38),
+          const SizedBox(height: 18),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: days
-                .map((day) => Text(day, style: AppText.calendarHead))
-                .toList(),
+            children: <Widget>[
+              for (final String weekday in weekdays)
+                Expanded(
+                  child: Text(
+                    weekday,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppTheme.mutedInk,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 12),
           GridView.builder(
+            itemCount: 35,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 7,
-              childAspectRatio: 1.08,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 4,
             ),
-            itemCount: 35,
-            itemBuilder: (context, index) {
-              if (index == 0) return const SizedBox.shrink();
-              final day = numbers[index - 1];
-              final selected = day == 2;
+            itemBuilder: (BuildContext context, int index) {
+              final int day = index - 1;
+              final bool visible = day >= 1 && day <= 30;
+              final bool selected = day == 2;
               return Center(
-                child: Container(
-                  width: selected ? 58 : null,
-                  height: selected ? 58 : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: selected ? primary : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
                   alignment: Alignment.center,
-                  decoration: selected
-                      ? BoxDecoration(
-                          color: palette.color, shape: BoxShape.circle)
-                      : null,
                   child: Text(
-                    '$day',
-                    style: selected
-                        ? AppText.calendarSelected
-                        : AppText.calendar.copyWith(
-                            color: day == 1
-                                ? AppColors.ink
-                                : AppColors.disabledText,
-                          ),
+                    visible ? '$day' : '',
+                    style: TextStyle(
+                      color: selected
+                          ? Colors.white
+                          : visible
+                              ? AppTheme.ink.withOpacity(0.42)
+                              : Colors.transparent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               );
             },
           ),
-          const SizedBox(height: 26),
-          const Divider(color: AppColors.divider, thickness: 1.5),
-          const SizedBox(height: 26),
-          const StatsRow(),
-          const SizedBox(height: 150),
         ],
       ),
     );

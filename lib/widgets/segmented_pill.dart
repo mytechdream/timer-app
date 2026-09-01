@@ -5,61 +5,68 @@ import '../theme/app_theme.dart';
 class SegmentedPill extends StatelessWidget {
   const SegmentedPill({
     super.key,
-    required this.labels,
-    required this.selected,
-    required this.onSelected,
+    required this.items,
+    required this.selectedIndex,
+    required this.onChanged,
   });
 
-  final List<String> labels;
-  final int selected;
-  final ValueChanged<int> onSelected;
+  final List<String> items;
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 64,
-      padding: const EdgeInsets.all(6),
+      height: 48,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.segmentBg,
-        borderRadius: BorderRadius.circular(34),
+        color: const Color(0xFFEDEFF4),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++)
+        children: <Widget>[
+          for (int index = 0; index < items.length; index++)
             Expanded(
-              child: Semantics(
-                selected: selected == i,
-                button: true,
-                child: GestureDetector(
-                  onTap: () => onSelected(i),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 170),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: selected == i ? Colors.white : Colors.transparent,
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: selected == i
-                          ? [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(.03),
-                                blurRadius: 10,
-                                offset: const Offset(0, 3),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Text(
-                      labels[i],
-                      style: AppText.segment.copyWith(
-                        color:
-                            selected == i ? AppColors.ink : AppColors.mutedText,
-                      ),
-                    ),
-                  ),
-                ),
+              child: _SegmentButton(
+                label: items[index],
+                selected: index == selectedIndex,
+                onTap: () => onChanged(index),
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _SegmentButton extends StatelessWidget {
+  const _SegmentButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? Colors.white : Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? AppTheme.ink : AppTheme.mutedInk,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
       ),
     );
   }

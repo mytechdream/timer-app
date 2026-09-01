@@ -1,36 +1,35 @@
-import 'dart:async';
-
 import 'package:audioplayers/audioplayers.dart';
 
-class TimerAudio {
-  TimerAudio()
-      : _tickPlayer = AudioPlayer(),
-        _completionPlayer = AudioPlayer() {
-    unawaited(_tickPlayer.setReleaseMode(ReleaseMode.stop));
-    unawaited(_completionPlayer.setReleaseMode(ReleaseMode.stop));
+abstract class TimerAudio {
+  Future<void> playComplete();
+
+  Future<void> dispose();
+}
+
+class AudioplayersTimerAudio implements TimerAudio {
+  AudioplayersTimerAudio() : _player = AudioPlayer();
+
+  final AudioPlayer _player;
+
+  static final AssetSource _completeSound =
+      AssetSource('audio/countdown_complete.wav');
+
+  @override
+  Future<void> playComplete() async {
+    await _player.stop();
+    await _player.play(_completeSound);
   }
 
-  final AudioPlayer _tickPlayer;
-  final AudioPlayer _completionPlayer;
+  @override
+  Future<void> dispose() => _player.dispose();
+}
 
-  Future<void> playTick() async {
-    await _tickPlayer.stop();
-    await _tickPlayer.play(
-      AssetSource('audio/clock_tick.wav'),
-      volume: 0.35,
-    );
-  }
+class SilentTimerAudio implements TimerAudio {
+  const SilentTimerAudio();
 
-  Future<void> playCompletion() async {
-    await _completionPlayer.stop();
-    await _completionPlayer.play(
-      AssetSource('audio/countdown_complete.wav'),
-      volume: 0.85,
-    );
-  }
+  @override
+  Future<void> playComplete() async {}
 
-  Future<void> dispose() async {
-    await _tickPlayer.dispose();
-    await _completionPlayer.dispose();
-  }
+  @override
+  Future<void> dispose() async {}
 }

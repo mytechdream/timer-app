@@ -3,34 +3,62 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 class StatsRow extends StatelessWidget {
-  const StatsRow({super.key});
+  const StatsRow({
+    super.key,
+    required this.items,
+  });
+
+  final List<StatItem> items;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        StatBlock(label: '累计时长', value: '0秒'),
-        StatBlock(label: '累计次数', value: '0'),
-        StatBlock(label: '日平均', value: '0秒'),
+    return Row(
+      children: <Widget>[
+        for (int index = 0; index < items.length; index++) ...<Widget>[
+          if (index > 0) const SizedBox(width: 12),
+          Expanded(child: _StatCard(item: items[index])),
+        ],
       ],
     );
   }
 }
 
-class StatBlock extends StatelessWidget {
-  const StatBlock({super.key, required this.label, required this.value});
+class StatItem {
+  const StatItem(this.label, this.value);
 
   final String label;
   final String value;
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({required this.item});
+
+  final StatItem item;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: [
-        Text(label, style: AppText.statLabel),
-        const SizedBox(height: 10),
-        Text(value, style: AppText.statValue),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        Text(
+          item.label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppTheme.mutedInk,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          item.value,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppTheme.ink,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
       ],
     );
   }

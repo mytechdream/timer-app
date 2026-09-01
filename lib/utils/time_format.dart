@@ -1,11 +1,35 @@
-String formatCompact(int seconds) {
-  final normalized = seconds < 0 ? 0 : seconds;
-  final minutes = normalized ~/ 60;
-  final remainingSeconds = normalized % 60;
-  if (minutes >= 60) {
-    final hours = minutes ~/ 60;
-    final rest = minutes % 60;
-    return '${hours.toString().padLeft(2, '0')}:${rest.toString().padLeft(2, '0')}';
+String formatDigitalTime(int totalSeconds) {
+  final int safeSeconds = totalSeconds < 0 ? 0 : totalSeconds;
+  final int hours = safeSeconds ~/ 3600;
+  final int minutes = (safeSeconds % 3600) ~/ 60;
+  final int seconds = safeSeconds % 60;
+
+  if (hours > 0) {
+    return '${hours.toString().padLeft(2, '0')}:'
+        '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
   }
-  return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+
+  return '${minutes.toString().padLeft(2, '0')}:'
+      '${seconds.toString().padLeft(2, '0')}';
+}
+
+String formatChineseDuration(int totalSeconds) {
+  final int safeSeconds = totalSeconds < 0 ? 0 : totalSeconds;
+  final int hours = safeSeconds ~/ 3600;
+  final int minutes = (safeSeconds % 3600) ~/ 60;
+  final int seconds = safeSeconds % 60;
+  return '$hours 小时   $minutes 分钟   $seconds 秒';
+}
+
+String formatMinuteLabel(int totalSeconds) {
+  final int minutes = (totalSeconds / 60).round();
+  return '$minutes分钟';
+}
+
+String formatBubbleTime(int totalSeconds) {
+  final int minutes = totalSeconds ~/ 60;
+  final int seconds = totalSeconds % 60;
+  return '${minutes.toString().padLeft(2, '0')}:'
+      '${seconds.toString().padLeft(2, '0')}';
 }

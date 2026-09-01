@@ -1,166 +1,132 @@
 import 'package:flutter/material.dart';
 
-import '../models/timer_models.dart';
+class TimerPalette {
+  const TimerPalette({
+    required this.name,
+    required this.primary,
+    required this.soft,
+    required this.background,
+    required this.surface,
+  });
 
-class AppColors {
-  static const ink = Color(0xFF071523);
-  static const mutedText = Color(0xFF728094);
-  static const disabledText = Color(0xFFD6DCE6);
-  static const bg = Color(0xFFF7F8FE);
-  static const pinkBg = Color(0xFFFFF4F9);
-  static const softPink = Color(0xFFFFF7FB);
-  static const segmentBg = Color(0xFFE9EDF5);
-  static const divider = Color(0xFFE5EAF3);
+  final String name;
+  final Color primary;
+  final Color soft;
+  final Color background;
+  final Color surface;
+}
 
-  static const palettes = [
-    AppPalette(
+class AppTheme {
+  static const Color ink = Color(0xFF08111F);
+  static const Color mutedInk = Color(0xFF7B8492);
+  static const Color panel = Color(0xFFFFFFFF);
+  static const Color divider = Color(0xFFEAECEF);
+
+  static const List<TimerPalette> palettes = <TimerPalette>[
+    TimerPalette(
       name: '天空蓝',
-      color: Color(0xFF37A9F2),
-      tint: Color(0xFFE5F5FF),
-      softBorder: Color(0xFFCFEAFE),
+      primary: Color(0xFF2F9BF4),
+      soft: Color(0xFFEAF4FF),
+      background: Color(0xFFF5F9FF),
+      surface: Color(0xFFFFFFFF),
     ),
-    AppPalette(
+    TimerPalette(
       name: '樱花粉',
-      color: Color(0xFFF2438B),
-      tint: Color(0xFFFFE4F0),
-      softBorder: Color(0xFFFFD4E6),
+      primary: Color(0xFFF04286),
+      soft: Color(0xFFFFECF5),
+      background: Color(0xFFFFF6FA),
+      surface: Color(0xFFFFFFFF),
     ),
-    AppPalette(
+    TimerPalette(
       name: '薄荷绿',
-      color: Color(0xFF20B486),
-      tint: Color(0xFFE1F8F0),
-      softBorder: Color(0xFFC9EFE3),
+      primary: Color(0xFF12A884),
+      soft: Color(0xFFE7FAF4),
+      background: Color(0xFFF3FCF8),
+      surface: Color(0xFFFFFFFF),
     ),
-    AppPalette(
+    TimerPalette(
       name: '葡萄紫',
-      color: Color(0xFF7657F2),
-      tint: Color(0xFFEEE9FF),
-      softBorder: Color(0xFFDCD2FF),
+      primary: Color(0xFF7657E8),
+      soft: Color(0xFFF0ECFF),
+      background: Color(0xFFF8F6FF),
+      surface: Color(0xFFFFFFFF),
     ),
-    AppPalette(
+    TimerPalette(
       name: '暖橙色',
-      color: Color(0xFFFFA20C),
-      tint: Color(0xFFFFF0D7),
-      softBorder: Color(0xFFFFDE9F),
+      primary: Color(0xFFF4A100),
+      soft: Color(0xFFFFF4DA),
+      background: Color(0xFFFFFAEF),
+      surface: Color(0xFFFFFFFF),
     ),
   ];
+
+  static ThemeData build(TimerPalette palette) {
+    final ColorScheme colorScheme = ColorScheme.fromSeed(
+      seedColor: palette.primary,
+      primary: palette.primary,
+      surface: palette.surface,
+      brightness: Brightness.light,
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: palette.background,
+      fontFamily: 'Roboto',
+      fontFamilyFallback: const <String>[
+        'Microsoft YaHei',
+        'PingFang SC',
+        'Noto Sans CJK SC',
+        'Noto Sans SC',
+        'Arial Unicode MS',
+        'sans-serif',
+      ],
+      textTheme: const TextTheme(
+        headlineLarge: TextStyle(
+          color: ink,
+          fontSize: 32,
+          fontWeight: FontWeight.w800,
+          height: 1.12,
+        ),
+        headlineMedium: TextStyle(
+          color: ink,
+          fontSize: 26,
+          fontWeight: FontWeight.w800,
+          height: 1.15,
+        ),
+        titleLarge: TextStyle(
+          color: ink,
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+        ),
+        titleMedium: TextStyle(
+          color: ink,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+        bodyLarge: TextStyle(
+          color: ink,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+        bodyMedium: TextStyle(
+          color: mutedInk,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      iconTheme: const IconThemeData(color: ink),
+      splashFactory: InkRipple.splashFactory,
+    );
+  }
 }
 
-class AppLayout {
-  static const phoneMaxWidth = 430.0;
-  static const pageHorizontalPadding = 22.0;
-}
-
-class AppText {
-  static const title = TextStyle(
-    fontSize: 36,
-    height: 1.05,
-    fontWeight: FontWeight.w900,
-    color: AppColors.ink,
-  );
-  static const navTitle = TextStyle(
-    fontSize: 25,
-    fontWeight: FontWeight.w900,
-    color: AppColors.ink,
-  );
-  static const large = TextStyle(
-    fontSize: 29,
-    fontWeight: FontWeight.w900,
-    color: AppColors.ink,
-  );
-  static const section = TextStyle(
-    fontSize: 23,
-    fontWeight: FontWeight.w900,
-    color: AppColors.ink,
-  );
-  static const segment = TextStyle(fontSize: 20, fontWeight: FontWeight.w900);
-  static const picker = TextStyle(
-    fontSize: 28,
-    fontWeight: FontWeight.w900,
-    color: AppColors.ink,
-  );
-  static const fadedNumber = TextStyle(
-    fontSize: 20,
-    fontWeight: FontWeight.w800,
-    color: AppColors.disabledText,
-  );
-  static const fadedNumberSmall = TextStyle(
-    fontSize: 18,
-    fontWeight: FontWeight.w800,
-    color: AppColors.disabledText,
-  );
-  static const button = TextStyle(fontSize: 25, fontWeight: FontWeight.w900);
-  static const bubbleTime = TextStyle(
-    fontSize: 33,
-    height: 1,
-    fontWeight: FontWeight.w900,
-  );
-  static const bubbleLabel = TextStyle(
-    fontSize: 16,
-    fontWeight: FontWeight.w800,
-    color: AppColors.mutedText,
-  );
-  static const emptyTitle = TextStyle(
-    fontSize: 25,
-    fontWeight: FontWeight.w900,
-    color: AppColors.ink,
-  );
-  static const bodyMuted = TextStyle(
-    fontSize: 17,
-    fontWeight: FontWeight.w700,
-    color: AppColors.mutedText,
-  );
-  static const subtleBold = TextStyle(
-    fontSize: 19,
-    fontWeight: FontWeight.w800,
-    color: AppColors.mutedText,
-  );
-  static const tileTitle = TextStyle(
-    fontSize: 20,
-    fontWeight: FontWeight.w900,
-    color: AppColors.ink,
-  );
-  static const tileValue = TextStyle(
-    fontSize: 17,
-    fontWeight: FontWeight.w800,
-    color: AppColors.mutedText,
-  );
-  static const choice = TextStyle(fontSize: 16, fontWeight: FontWeight.w900);
-  static const nav = TextStyle(fontSize: 15, fontWeight: FontWeight.w900);
-  static const capsule = TextStyle(fontSize: 22, fontWeight: FontWeight.w900);
-  static const calendarHead = TextStyle(
-    fontSize: 17,
-    fontWeight: FontWeight.w900,
-    color: AppColors.mutedText,
-  );
-  static const calendar = TextStyle(
-    fontSize: 30,
-    fontWeight: FontWeight.w500,
-    color: AppColors.disabledText,
-  );
-  static const calendarSelected = TextStyle(
-    fontSize: 30,
-    fontWeight: FontWeight.w900,
-    color: Colors.white,
-  );
-  static const statLabel = TextStyle(
-    fontSize: 20,
-    fontWeight: FontWeight.w900,
-    color: AppColors.mutedText,
-  );
-  static const statValue = TextStyle(
-    fontSize: 24,
-    fontWeight: FontWeight.w900,
-    color: AppColors.ink,
-  );
-  static const input = TextStyle(
-    fontSize: 24,
-    fontWeight: FontWeight.w800,
-    color: AppColors.ink,
-  );
-  static const inputHint = TextStyle(
-    fontSize: 24,
-    fontWeight: FontWeight.w800,
-    color: AppColors.disabledText,
-  );
+extension TimerTheme on BuildContext {
+  TimerPalette get timerPalette {
+    final Color primary = Theme.of(this).colorScheme.primary;
+    return AppTheme.palettes.firstWhere(
+      (TimerPalette palette) => palette.primary.value == primary.value,
+      orElse: () => AppTheme.palettes[1],
+    );
+  }
 }
