@@ -8,7 +8,13 @@ Finder get addTimerButton => find.byWidgetPredicate(
       (widget) => widget is IconButton && widget.tooltip == '创建倒计时',
     );
 
-Future<void> pumpTimerApp(WidgetTester tester, TimerRepository repository) async {
+Future<void> pumpTimerApp(
+    WidgetTester tester, TimerRepository repository) async {
+  tester.view.physicalSize = const Size(430, 932);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
   await tester.pumpWidget(TimerApp(repository: repository));
   await tester.pumpAndSettle();
 }
