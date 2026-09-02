@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/timer_models.dart';
+import '../services/timer_audio.dart';
 import '../theme/app_theme.dart';
 import '../utils/time_format.dart';
 import '../widgets/app_page.dart';
@@ -10,12 +13,14 @@ class SettingsPage extends StatelessWidget {
   const SettingsPage({
     super.key,
     required this.settings,
+    required this.audio,
     required this.selectedPaletteIndex,
     required this.onPaletteChanged,
     required this.onSettingsChanged,
   });
 
   final TimerSettings settings;
+  final TimerAudio audio;
   final int selectedPaletteIndex;
   final ValueChanged<int> onPaletteChanged;
   final Future<void> Function(TimerSettings settings) onSettingsChanged;
@@ -61,18 +66,14 @@ class SettingsPage extends StatelessWidget {
                   _SettingsRow(
                     icon: Icons.notifications_active_outlined,
                     title: '结束提醒',
-                    value: settings.completionSoundEnabled ? '铃声 + 振动' : '关闭',
-                    onTap: () => onSettingsChanged(
-                      settings.copyWith(
-                        completionSoundEnabled:
-                            !settings.completionSoundEnabled,
-                      ),
-                    ),
+                    value: settings.completionReminderName,
+                    onTap: () => _showCompletionReminderSheet(context),
                   ),
-                  const _SettingsRow(
+                  _SettingsRow(
                     icon: Icons.volume_up_outlined,
                     title: '提示音',
-                    value: '清脆铃声',
+                    value: settings.alertSoundName,
+                    onTap: () => _showSoundSheet(context),
                   ),
                   _SettingsRow(
                     icon: Icons.phone_android_rounded,
@@ -125,6 +126,49 @@ class SettingsPage extends StatelessWidget {
         settings.copyWith(defaultCountdownSeconds: seconds),
       ),
     );
+  }
+
+  void _showCompletionReminderSheet(BuildContext context) {
+    _showOptionSheet<String>(
+      context: context,
+      title: '结束提醒',
+      options: TimerSettings.completionReminderOptions,
+      labelBuilder: (String reminder) => reminder,
+      selected: settings.completionReminderName,
+      onSelected: (String reminder) => onSettingsChanged(
+        settings.copyWith(
+          completionReminderName: reminder,
+          completionSoundEnabled: reminder != TimerSettings.reminderOff,
+        ),
+      ),
+    );
+  }
+
+  void _showSoundSheet(BuildContext context) {
+    _showOptionSheet<String>(
+      context: context,
+      title: '提示音',
+      options: TimerSettings.alertSoundOptions,
+      labelBuilder: (String sound) => sound,
+      selected: settings.alertSoundName,
+      onSelected: (String sound) async {
+        unawaited(_previewSound(sound));
+        await onSettingsChanged(
+          settings.copyWith(
+            alertSoundName: sound,
+            completionSoundEnabled: true,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _previewSound(String sound) async {
+    try {
+      await audio.playComplete(sound);
+    } catch (_) {
+      // Sound preview should never block saving the user's selection.
+    }
   }
 
   void _showExtendSheet(BuildContext context) {

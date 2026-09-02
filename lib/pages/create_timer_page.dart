@@ -82,6 +82,97 @@ class AddLabelPage extends StatefulWidget {
   State<AddLabelPage> createState() => _AddLabelPageState();
 }
 
+class EditLabelPage extends StatefulWidget {
+  const EditLabelPage({
+    super.key,
+    required this.initialLabel,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  final String initialLabel;
+  final Future<void> Function(String label) onSave;
+  final Future<void> Function() onDelete;
+
+  @override
+  State<EditLabelPage> createState() => _EditLabelPageState();
+}
+
+class _EditLabelPageState extends State<EditLabelPage> {
+  late final TextEditingController _controller;
+  bool _saving = false;
+  bool _deleting = false;
+
+  String get _label => _controller.text.trim();
+
+  bool get _canSave {
+    return !_saving &&
+        !_deleting &&
+        _label.isNotEmpty &&
+        _label != widget.initialLabel;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialLabel);
+    _controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _EditorScaffold(
+      title: '修改标签',
+      canSave: _canSave,
+      onSave: _save,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('标签名称', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 14),
+          _InputCard(
+            controller: _controller,
+            hint: '例如：阅读',
+          ),
+          const SizedBox(height: 26),
+          _DeleteLabelButton(
+            label: _deleting ? '删除中...' : '删除标签',
+            onPressed: _saving || _deleting ? null : _delete,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    if (!_canSave) {
+      return;
+    }
+    setState(() => _saving = true);
+    await widget.onSave(_label);
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _delete() async {
+    if (_deleting) {
+      return;
+    }
+    setState(() => _deleting = true);
+    await widget.onDelete();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+}
+
 class _AddLabelPageState extends State<AddLabelPage> {
   final TextEditingController _controller = TextEditingController();
 
@@ -213,6 +304,42 @@ class _InputCard extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
           border: InputBorder.none,
+        ),
+      ),
+    );
+  }
+}
+
+class _DeleteLabelButton extends StatelessWidget {
+  const _DeleteLabelButton({
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    const Color danger = Color(0xFFE5486D);
+
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.delete_outline_rounded, size: 22),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: danger,
+          disabledForegroundColor: danger.withOpacity(0.36),
+          side: BorderSide(color: danger.withOpacity(0.36), width: 1.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
         ),
       ),
     );

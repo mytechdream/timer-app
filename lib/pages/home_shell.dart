@@ -19,9 +19,13 @@ class HomeShell extends StatefulWidget {
     required this.paletteIndex,
     required this.onPaletteChanged,
     required this.onCreateTimer,
+    required this.onDeleteTimer,
     required this.onCreateLabel,
+    required this.onRenameLabel,
+    required this.onDeleteLabel,
     required this.onSettingsChanged,
     required this.onHistoryEntry,
+    required this.onDeleteHistoryEntry,
   });
 
   final TimerSnapshot snapshot;
@@ -29,9 +33,13 @@ class HomeShell extends StatefulWidget {
   final int paletteIndex;
   final ValueChanged<int> onPaletteChanged;
   final Future<void> Function(String name, int seconds) onCreateTimer;
+  final Future<void> Function(String id) onDeleteTimer;
   final Future<void> Function(String label) onCreateLabel;
+  final Future<void> Function(String oldLabel, String newLabel) onRenameLabel;
+  final Future<void> Function(String label) onDeleteLabel;
   final Future<void> Function(TimerSettings settings) onSettingsChanged;
   final Future<void> Function(TimerHistoryEntry entry) onHistoryEntry;
+  final Future<void> Function(String id) onDeleteHistoryEntry;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -53,24 +61,31 @@ class _HomeShellState extends State<HomeShell> {
               TimerDashboardPage(
                 timers: widget.snapshot.timers,
                 labels: widget.snapshot.labels,
+                hiddenDefaultTimerIds: widget.snapshot.hiddenDefaultTimerIds,
+                hiddenDefaultLabels: widget.snapshot.hiddenDefaultLabels,
                 settings: widget.snapshot.settings,
                 onCreateTimer: () => _openCreateTimer(context),
+                onDeleteTimer: (String id) => widget.onDeleteTimer(id),
                 onCreateLabel: () => _openAddLabel(context),
+                onEditLabel: (String label) => _openEditLabel(context, label),
                 onOpenHistory: () => _openHistory(context),
                 onStartTimer: _openRunningTimer,
               ),
               BatchTimerPage(
                 timers: widget.snapshot.timers,
-                onCreateTimer: () => _openCreateTimer(context),
-                onStartTimer: (CreatedTimer timer) => _openRunningTimer(
-                  TimerRunMode.countdown,
-                  timer.name,
-                  timer.seconds,
-                ),
+                labels: widget.snapshot.labels,
+                hiddenDefaultTimerIds: widget.snapshot.hiddenDefaultTimerIds,
+                hiddenDefaultLabels: widget.snapshot.hiddenDefaultLabels,
+                onCreateTimer: widget.onCreateTimer,
+                onDeleteTimer: widget.onDeleteTimer,
+                onCreateLabel: widget.onCreateLabel,
+                onEditLabel: (String label) => _openEditLabel(context, label),
+                onDeleteLabel: widget.onDeleteLabel,
               ),
               InsightsPage(history: widget.snapshot.history),
               SettingsPage(
                 settings: widget.snapshot.settings,
+                audio: widget.audio,
                 selectedPaletteIndex: widget.paletteIndex,
                 onPaletteChanged: widget.onPaletteChanged,
                 onSettingsChanged: widget.onSettingsChanged,
@@ -96,6 +111,7 @@ class _HomeShellState extends State<HomeShell> {
       initialSeconds: seconds,
       settings: widget.snapshot.settings,
       audio: widget.audio,
+      onSettingsChanged: widget.onSettingsChanged,
       onCompleted: widget.onHistoryEntry,
     );
     Navigator.of(context).push(
@@ -121,10 +137,25 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _openEditLabel(BuildContext context, String label) {
+    Navigator.of(context).push(
+      _instantRoute<void>(
+        (_) => EditLabelPage(
+          initialLabel: label,
+          onSave: (String value) => widget.onRenameLabel(label, value),
+          onDelete: () => widget.onDeleteLabel(label),
+        ),
+      ),
+    );
+  }
+
   void _openHistory(BuildContext context) {
     Navigator.of(context).push(
       _instantRoute<void>(
-        (_) => HistoryPage(history: widget.snapshot.history),
+        (_) => HistoryPage(
+          history: widget.snapshot.history,
+          onDelete: widget.onDeleteHistoryEntry,
+        ),
       ),
     );
   }

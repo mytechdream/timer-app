@@ -66,6 +66,29 @@ class _TimerAppState extends State<TimerApp> {
     );
   }
 
+  Future<void> _deleteTimer(String id) async {
+    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
+    if (TimerDefaults.isDefaultTimerId(id)) {
+      await _saveSnapshot(
+        snapshot.copyWith(
+          hiddenDefaultTimerIds: <String>{
+            ...snapshot.hiddenDefaultTimerIds,
+            id,
+          }.toList(),
+        ),
+      );
+      return;
+    }
+
+    await _saveSnapshot(
+      snapshot.copyWith(
+        timers: snapshot.timers
+            .where((CreatedTimer timer) => timer.id != id)
+            .toList(),
+      ),
+    );
+  }
+
   Future<void> _createLabel(String label) async {
     final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
     if (snapshot.labels.contains(label)) {
@@ -73,6 +96,73 @@ class _TimerAppState extends State<TimerApp> {
     }
     await _saveSnapshot(
       snapshot.copyWith(labels: <String>[...snapshot.labels, label]),
+    );
+  }
+
+  Future<void> _renameLabel(String oldLabel, String newLabel) async {
+    final String normalized = newLabel.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
+    final bool isStoredLabel = snapshot.labels.contains(oldLabel);
+    final bool isDefaultLabel = TimerDefaults.isDefaultLabel(oldLabel);
+    if (!isStoredLabel && !isDefaultLabel) {
+      return;
+    }
+    if (normalized != oldLabel && snapshot.labels.contains(normalized)) {
+      return;
+    }
+    if (normalized != oldLabel &&
+        TimerDefaults.isDefaultLabel(normalized) &&
+        !snapshot.hiddenDefaultLabels.contains(normalized)) {
+      await _deleteLabel(oldLabel);
+      return;
+    }
+
+    if (isDefaultLabel && !isStoredLabel) {
+      await _saveSnapshot(
+        snapshot.copyWith(
+          labels: normalized == oldLabel
+              ? snapshot.labels
+              : <String>[...snapshot.labels, normalized],
+          hiddenDefaultLabels: <String>{
+            ...snapshot.hiddenDefaultLabels,
+            oldLabel,
+          }.toList(),
+        ),
+      );
+      return;
+    }
+
+    await _saveSnapshot(
+      snapshot.copyWith(
+        labels: <String>[
+          for (final String label in snapshot.labels)
+            if (label == oldLabel) normalized else label,
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteLabel(String label) async {
+    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
+    final bool isStoredLabel = snapshot.labels.contains(label);
+    final bool isDefaultLabel = TimerDefaults.isDefaultLabel(label);
+    if (!isStoredLabel && !isDefaultLabel) {
+      return;
+    }
+
+    await _saveSnapshot(
+      snapshot.copyWith(
+        labels: snapshot.labels
+            .where((String existingLabel) => existingLabel != label)
+            .toList(),
+        hiddenDefaultLabels: isDefaultLabel
+            ? <String>{...snapshot.hiddenDefaultLabels, label}.toList()
+            : snapshot.hiddenDefaultLabels,
+      ),
     );
   }
 
@@ -87,6 +177,17 @@ class _TimerAppState extends State<TimerApp> {
       snapshot.copyWith(
         history:
             <TimerHistoryEntry>[entry, ...snapshot.history].take(100).toList(),
+      ),
+    );
+  }
+
+  Future<void> _deleteHistoryEntry(String id) async {
+    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
+    await _saveSnapshot(
+      snapshot.copyWith(
+        history: snapshot.history
+            .where((TimerHistoryEntry entry) => entry.id != id)
+            .toList(),
       ),
     );
   }
@@ -117,9 +218,13 @@ class _TimerAppState extends State<TimerApp> {
               onPaletteChanged: (int index) =>
                   setState(() => _paletteIndex = index),
               onCreateTimer: _createTimer,
+              onDeleteTimer: _deleteTimer,
               onCreateLabel: _createLabel,
+              onRenameLabel: _renameLabel,
+              onDeleteLabel: _deleteLabel,
               onSettingsChanged: _updateSettings,
               onHistoryEntry: _addHistoryEntry,
+              onDeleteHistoryEntry: _deleteHistoryEntry,
             ),
     );
   }

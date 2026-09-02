@@ -67,6 +67,8 @@ flutter:
   assets:
     - assets/audio/clock_tick.wav
     - assets/audio/countdown_complete.wav
+    - assets/audio/countdown_soft.wav
+    - assets/audio/countdown_electronic.wav
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware
