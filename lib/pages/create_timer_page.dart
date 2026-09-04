@@ -8,9 +8,11 @@ import '../widgets/duration_picker_card.dart';
 class CreateTimerPage extends StatefulWidget {
   const CreateTimerPage({
     super.key,
+    required this.initialSeconds,
     required this.onSave,
   });
 
+  final int initialSeconds;
   final Future<void> Function(String name, int seconds) onSave;
 
   @override
@@ -19,11 +21,12 @@ class CreateTimerPage extends StatefulWidget {
 
 class _CreateTimerPageState extends State<CreateTimerPage> {
   final TextEditingController _controller = TextEditingController();
-  int _seconds = 5 * 60;
+  late int _seconds;
 
   @override
   void initState() {
     super.initState();
+    _seconds = widget.initialSeconds;
     _controller.addListener(() => setState(() {}));
   }
 
@@ -54,6 +57,7 @@ class _CreateTimerPageState extends State<CreateTimerPage> {
           _InputCard(
             controller: _controller,
             hint: '例如：煮鸡蛋',
+            errorText: null,
           ),
         ],
       ),
@@ -73,9 +77,11 @@ class _CreateTimerPageState extends State<CreateTimerPage> {
 class AddLabelPage extends StatefulWidget {
   const AddLabelPage({
     super.key,
+    required this.existingLabels,
     required this.onSave,
   });
 
+  final Set<String> existingLabels;
   final Future<void> Function(String label) onSave;
 
   @override
@@ -86,11 +92,13 @@ class EditLabelPage extends StatefulWidget {
   const EditLabelPage({
     super.key,
     required this.initialLabel,
+    required this.existingLabels,
     required this.onSave,
     required this.onDelete,
   });
 
   final String initialLabel;
+  final Set<String> existingLabels;
   final Future<void> Function(String label) onSave;
   final Future<void> Function() onDelete;
 
@@ -105,11 +113,17 @@ class _EditLabelPageState extends State<EditLabelPage> {
 
   String get _label => _controller.text.trim();
 
+  bool get _hasDuplicateLabel {
+    return _label != widget.initialLabel &&
+        widget.existingLabels.contains(_label);
+  }
+
   bool get _canSave {
     return !_saving &&
         !_deleting &&
         _label.isNotEmpty &&
-        _label != widget.initialLabel;
+        _label != widget.initialLabel &&
+        !_hasDuplicateLabel;
   }
 
   @override
@@ -139,6 +153,7 @@ class _EditLabelPageState extends State<EditLabelPage> {
           _InputCard(
             controller: _controller,
             hint: '例如：阅读',
+            errorText: _hasDuplicateLabel ? '标签已存在' : null,
           ),
           const SizedBox(height: 26),
           _DeleteLabelButton(
@@ -176,7 +191,12 @@ class _EditLabelPageState extends State<EditLabelPage> {
 class _AddLabelPageState extends State<AddLabelPage> {
   final TextEditingController _controller = TextEditingController();
 
-  bool get _canSave => _controller.text.trim().isNotEmpty;
+  String get _label => _controller.text.trim();
+
+  bool get _hasDuplicateLabel =>
+      _label.isNotEmpty && widget.existingLabels.contains(_label);
+
+  bool get _canSave => _label.isNotEmpty && !_hasDuplicateLabel;
 
   @override
   void initState() {
@@ -204,6 +224,7 @@ class _AddLabelPageState extends State<AddLabelPage> {
           _InputCard(
             controller: _controller,
             hint: '例如：阅读',
+            errorText: _hasDuplicateLabel ? '标签已存在' : null,
           ),
         ],
       ),
@@ -214,7 +235,7 @@ class _AddLabelPageState extends State<AddLabelPage> {
     if (!_canSave) {
       return;
     }
-    await widget.onSave(_controller.text.trim());
+    await widget.onSave(_label);
     if (mounted) {
       Navigator.of(context).pop();
     }
@@ -278,34 +299,58 @@ class _EditorScaffold extends StatelessWidget {
 }
 
 class _InputCard extends StatelessWidget {
-  const _InputCard({required this.controller, required this.hint});
+  const _InputCard({
+    required this.controller,
+    required this.hint,
+    required this.errorText,
+  });
 
   final TextEditingController controller;
   final String hint;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-      color: Colors.white.withOpacity(0.74),
-      child: TextField(
-        controller: controller,
-        minLines: 1,
-        maxLines: 1,
-        style: const TextStyle(
-          color: AppTheme.ink,
-          fontSize: 17,
-          fontWeight: FontWeight.w700,
-        ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(
-            color: Color(0xFFD7C9D3),
-            fontWeight: FontWeight.w700,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+          color: Colors.white.withOpacity(0.74),
+          child: TextField(
+            controller: controller,
+            minLines: 1,
+            maxLines: 1,
+            style: const TextStyle(
+              color: AppTheme.ink,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: const TextStyle(
+                color: Color(0xFFD7C9D3),
+                fontWeight: FontWeight.w700,
+              ),
+              border: InputBorder.none,
+            ),
           ),
-          border: InputBorder.none,
         ),
-      ),
+        if (errorText != null) ...<Widget>[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 18),
+            child: Text(
+              errorText!,
+              style: const TextStyle(
+                color: Color(0xFFE5486D),
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

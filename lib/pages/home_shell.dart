@@ -76,6 +76,8 @@ class _HomeShellState extends State<HomeShell> {
                 labels: widget.snapshot.labels,
                 hiddenDefaultTimerIds: widget.snapshot.hiddenDefaultTimerIds,
                 hiddenDefaultLabels: widget.snapshot.hiddenDefaultLabels,
+                defaultCountdownSeconds:
+                    widget.snapshot.settings.defaultCountdownSeconds,
                 onCreateTimer: widget.onCreateTimer,
                 onDeleteTimer: widget.onDeleteTimer,
                 onCreateLabel: widget.onCreateLabel,
@@ -124,7 +126,10 @@ class _HomeShellState extends State<HomeShell> {
   void _openCreateTimer(BuildContext context) {
     Navigator.of(context).push(
       _instantRoute<void>(
-        (_) => CreateTimerPage(onSave: widget.onCreateTimer),
+        (_) => CreateTimerPage(
+          initialSeconds: widget.snapshot.settings.defaultCountdownSeconds,
+          onSave: widget.onCreateTimer,
+        ),
       ),
     );
   }
@@ -132,7 +137,10 @@ class _HomeShellState extends State<HomeShell> {
   void _openAddLabel(BuildContext context) {
     Navigator.of(context).push(
       _instantRoute<void>(
-        (_) => AddLabelPage(onSave: widget.onCreateLabel),
+        (_) => AddLabelPage(
+          existingLabels: _visibleLabels,
+          onSave: widget.onCreateLabel,
+        ),
       ),
     );
   }
@@ -142,11 +150,23 @@ class _HomeShellState extends State<HomeShell> {
       _instantRoute<void>(
         (_) => EditLabelPage(
           initialLabel: label,
+          existingLabels: _visibleLabels,
           onSave: (String value) => widget.onRenameLabel(label, value),
           onDelete: () => widget.onDeleteLabel(label),
         ),
       ),
     );
+  }
+
+  Set<String> get _visibleLabels {
+    final Set<String> hidden = widget.snapshot.hiddenDefaultLabels.toSet();
+    return <String>{
+      for (final String label in TimerDefaults.stopwatchLabels)
+        if (!hidden.contains(label)) label,
+      for (final String label in TimerDefaults.batchStopwatchLabels)
+        if (!hidden.contains(label)) label,
+      ...widget.snapshot.labels,
+    };
   }
 
   void _openHistory(BuildContext context) {

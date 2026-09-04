@@ -49,7 +49,7 @@ class TimerDashboardPage extends StatefulWidget {
 
 class _TimerDashboardPageState extends State<TimerDashboardPage> {
   int _modeIndex = 0;
-  int _draftSeconds = 8 * 60;
+  late int _draftSeconds;
   String _selectedLabel = '口算';
 
   List<TimerBubbleData> get _countdownTimers {
@@ -82,8 +82,18 @@ class _TimerDashboardPageState extends State<TimerDashboardPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _draftSeconds = widget.settings.defaultCountdownSeconds;
+  }
+
+  @override
   void didUpdateWidget(covariant TimerDashboardPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.settings.defaultCountdownSeconds !=
+        widget.settings.defaultCountdownSeconds) {
+      _draftSeconds = widget.settings.defaultCountdownSeconds;
+    }
     final List<String> labels = _labels;
     if (labels.isEmpty) {
       _selectedLabel = '';
@@ -293,9 +303,16 @@ class _RunningTimerPageState extends State<RunningTimerPage> {
       return;
     }
     _exitDialogOpen = true;
-    final bool shouldExit = await showExitTimerDialog(context);
+    final bool shouldExit = await showExitTimerDialog(
+      context,
+      savesHistory: !_isCountdown && _session.displaySeconds > 0,
+    );
     _exitDialogOpen = false;
-    if (shouldExit && mounted) {
+    if (!shouldExit || !mounted) {
+      return;
+    }
+    await _session.saveStopwatchHistoryOnExit();
+    if (mounted) {
       Navigator.of(context).pop();
     }
   }
@@ -305,7 +322,41 @@ class _RunningTimerPageState extends State<RunningTimerPage> {
     final Color primary = Theme.of(context).colorScheme.primary;
     final double progress = _isCountdown && _session.initialSeconds > 0
         ? _session.displaySeconds / _session.initialSeconds
-        : (_session.displaySeconds % 60) / 60;
+        : 0;
+    final Widget timeFace = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        Text(
+          formatDigitalTime(_session.displaySeconds),
+          style: const TextStyle(
+            color: AppTheme.ink,
+            fontSize: 58,
+            fontWeight: FontWeight.w900,
+            height: 1,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              _isCountdown ? Icons.notifications_rounded : Icons.timer_rounded,
+              color: AppTheme.mutedInk,
+              size: 18,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              _isCountdown ? _endTimeText() : '正计时中',
+              style: const TextStyle(
+                color: AppTheme.mutedInk,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
 
     return PopScope(
       canPop: false,
@@ -347,48 +398,15 @@ class _RunningTimerPageState extends State<RunningTimerPage> {
                   child: SizedBox(
                     width: 292,
                     height: 292,
-                    child: CustomPaint(
-                      painter: _TimerRingPainter(
-                        color: primary,
-                        progress: progress.clamp(0, 1),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: <Widget>[
-                          Text(
-                            formatDigitalTime(_session.displaySeconds),
-                            style: const TextStyle(
-                              color: AppTheme.ink,
-                              fontSize: 58,
-                              fontWeight: FontWeight.w900,
-                              height: 1,
+                    child: _isCountdown
+                        ? CustomPaint(
+                            painter: _TimerRingPainter(
+                              color: primary,
+                              progress: progress.clamp(0, 1),
                             ),
-                          ),
-                          const SizedBox(height: 14),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              Icon(
-                                _isCountdown
-                                    ? Icons.notifications_rounded
-                                    : Icons.timer_rounded,
-                                color: AppTheme.mutedInk,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _isCountdown ? _endTimeText() : '正计时中',
-                                style: const TextStyle(
-                                  color: AppTheme.mutedInk,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+                            child: timeFace,
+                          )
+                        : Center(child: timeFace),
                   ),
                 ),
                 const Spacer(flex: 2),
@@ -710,7 +728,7 @@ class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
     final bool isCountdown = _session.mode == TimerRunMode.countdown;
     final double progress = isCountdown && _session.initialSeconds > 0
         ? _session.displaySeconds / _session.initialSeconds
-        : (_session.displaySeconds % 60) / 60;
+        : 0;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -819,15 +837,16 @@ class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
                       ],
                     ),
                   ),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      minHeight: 10,
-                      backgroundColor: Colors.white.withOpacity(0.12),
-                      value: progress.clamp(0.0, 1.0).toDouble(),
-                      valueColor: AlwaysStoppedAnimation<Color>(primary),
+                  if (isCountdown)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        minHeight: 10,
+                        backgroundColor: Colors.white.withOpacity(0.12),
+                        value: progress.clamp(0.0, 1.0).toDouble(),
+                        valueColor: AlwaysStoppedAnimation<Color>(primary),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -992,6 +1011,26 @@ class TimerSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> saveStopwatchHistoryOnExit() async {
+    if (_isCountdown || displaySeconds <= 0 || _completed) {
+      return;
+    }
+    _completed = true;
+    running = false;
+    _ticker?.cancel();
+    _ticker = null;
+    notifyListeners();
+    await onCompleted(
+      TimerHistoryEntry(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        name: name,
+        mode: mode,
+        durationSeconds: displaySeconds,
+        completedAt: DateTime.now(),
+      ),
+    );
+  }
+
   void _tick() {
     if (!running || _completed) {
       return;
@@ -1032,6 +1071,10 @@ class TimerSession extends ChangeNotifier {
         completedAt: DateTime.now(),
       ),
     );
+    displaySeconds = initialSeconds;
+    running = false;
+    _completed = false;
+    notifyListeners();
   }
 
   @override

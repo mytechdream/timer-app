@@ -19,6 +19,7 @@ class BatchTimerPage extends StatefulWidget {
     required this.labels,
     required this.hiddenDefaultTimerIds,
     required this.hiddenDefaultLabels,
+    required this.defaultCountdownSeconds,
     required this.onCreateTimer,
     required this.onDeleteTimer,
     required this.onCreateLabel,
@@ -30,6 +31,7 @@ class BatchTimerPage extends StatefulWidget {
   final List<String> labels;
   final List<String> hiddenDefaultTimerIds;
   final List<String> hiddenDefaultLabels;
+  final int defaultCountdownSeconds;
   final Future<void> Function(String name, int seconds) onCreateTimer;
   final Future<void> Function(String id) onDeleteTimer;
   final Future<void> Function(String label) onCreateLabel;
@@ -72,6 +74,17 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
         if (!hiddenDefaultLabels.contains(label)) label,
       ...widget.labels,
     }.toList();
+  }
+
+  Set<String> get _visibleLabels {
+    final Set<String> hiddenDefaultLabels = widget.hiddenDefaultLabels.toSet();
+    return <String>{
+      for (final String label in TimerDefaults.stopwatchLabels)
+        if (!hiddenDefaultLabels.contains(label)) label,
+      for (final String label in TimerDefaults.batchStopwatchLabels)
+        if (!hiddenDefaultLabels.contains(label)) label,
+      ...widget.labels,
+    };
   }
 
   bool get _isCountdownMode => _modeIndex == 0;
@@ -178,9 +191,15 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
             return state;
           }
           final int nextRemaining = math.max(0, state.remainingSeconds - 1);
+          if (nextRemaining == 0) {
+            return state.copyWith(
+              remainingSeconds: state.initialSeconds,
+              running: false,
+            );
+          }
           return state.copyWith(
             remainingSeconds: nextRemaining,
-            running: nextRemaining > 0,
+            running: true,
           );
         },
       );
@@ -212,6 +231,8 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
       builder: (BuildContext context) {
         return _BatchCreateSheet(
           mode: mode,
+          existingLabels: _visibleLabels,
+          initialSeconds: widget.defaultCountdownSeconds,
           onCreateTimer: widget.onCreateTimer,
           onCreateLabel: widget.onCreateLabel,
         );
@@ -519,13 +540,6 @@ class _CountdownBatchState {
   final bool running;
   final bool selected;
 
-  double get progress {
-    if (initialSeconds == 0) {
-      return 0;
-    }
-    return 1 - remainingSeconds / initialSeconds;
-  }
-
   _CountdownBatchState copyWith({
     int? initialSeconds,
     int? remainingSeconds,
@@ -551,8 +565,6 @@ class _StopwatchBatchState {
   final int elapsedSeconds;
   final bool running;
   final bool selected;
-
-  double get progress => (elapsedSeconds % 60) / 60;
 
   _StopwatchBatchState copyWith({
     int? elapsedSeconds,
@@ -623,7 +635,6 @@ class _BatchCountdownCard extends StatelessWidget {
       child: _BatchCardContent(
         title: timer.name,
         time: formatDigitalTime(state.remainingSeconds),
-        progress: state.progress.clamp(0.0, 1.0).toDouble(),
         selected: state.selected,
         selecting: selecting,
         running: state.running,
@@ -666,7 +677,6 @@ class _BatchStopwatchCard extends StatelessWidget {
       child: _BatchCardContent(
         title: label,
         time: formatDigitalTime(state.elapsedSeconds),
-        progress: state.progress,
         selected: state.selected,
         selecting: selecting,
         running: state.running,
@@ -738,7 +748,6 @@ class _BatchCardContent extends StatelessWidget {
   const _BatchCardContent({
     required this.title,
     required this.time,
-    required this.progress,
     required this.selected,
     required this.selecting,
     required this.running,
@@ -750,7 +759,6 @@ class _BatchCardContent extends StatelessWidget {
 
   final String title;
   final String time;
-  final double progress;
   final bool selected;
   final bool selecting;
   final bool running;
@@ -785,16 +793,6 @@ class _BatchCardContent extends StatelessWidget {
                   height: 1,
                 ),
               ),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: LinearProgressIndicator(
-                  minHeight: 5,
-                  backgroundColor: palette.soft,
-                  value: progress.clamp(0.0, 1.0).toDouble(),
-                  valueColor: AlwaysStoppedAnimation<Color>(primary),
-                ),
-              ),
             ],
           ),
         ),
@@ -824,11 +822,15 @@ class _BatchCardContent extends StatelessWidget {
 class _BatchCreateSheet extends StatefulWidget {
   const _BatchCreateSheet({
     required this.mode,
+    required this.existingLabels,
+    required this.initialSeconds,
     required this.onCreateTimer,
     required this.onCreateLabel,
   });
 
   final TimerRunMode mode;
+  final Set<String> existingLabels;
+  final int initialSeconds;
   final Future<void> Function(String name, int seconds) onCreateTimer;
   final Future<void> Function(String label) onCreateLabel;
 
@@ -838,21 +840,29 @@ class _BatchCreateSheet extends StatefulWidget {
 
 class _BatchCreateSheetState extends State<_BatchCreateSheet> {
   final TextEditingController _controller = TextEditingController();
-  int _seconds = 15 * 60;
+  late int _seconds;
   bool _saving = false;
 
   bool get _isCountdown => widget.mode == TimerRunMode.countdown;
+
+  String get _label => _controller.text.trim();
+
+  bool get _hasDuplicateLabel =>
+      !_isCountdown &&
+      _label.isNotEmpty &&
+      widget.existingLabels.contains(_label);
 
   bool get _canSave {
     if (_saving) {
       return false;
     }
-    return _isCountdown || _controller.text.trim().isNotEmpty;
+    return _isCountdown || (_label.isNotEmpty && !_hasDuplicateLabel);
   }
 
   @override
   void initState() {
     super.initState();
+    _seconds = widget.initialSeconds;
     _controller.addListener(() => setState(() {}));
   }
 
@@ -873,7 +883,7 @@ class _BatchCreateSheetState extends State<_BatchCreateSheet> {
           _controller.text.trim().isEmpty ? '新倒计时' : _controller.text.trim();
       await widget.onCreateTimer(name, _seconds);
     } else {
-      await widget.onCreateLabel(_controller.text.trim());
+      await widget.onCreateLabel(_label);
     }
 
     if (mounted) {
@@ -960,6 +970,7 @@ class _BatchCreateSheetState extends State<_BatchCreateSheet> {
                   controller: _controller,
                   hint: hint,
                   autofocus: !_isCountdown,
+                  errorText: _hasDuplicateLabel ? '标签已存在' : null,
                   onSubmitted: (_) => _save(),
                 ),
                 const SizedBox(height: 22),
@@ -982,44 +993,69 @@ class _SheetInput extends StatelessWidget {
     required this.controller,
     required this.hint,
     required this.autofocus,
+    required this.errorText,
     required this.onSubmitted,
   });
 
   final TextEditingController controller;
   final String hint;
   final bool autofocus;
+  final String? errorText;
   final ValueChanged<String> onSubmitted;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.82),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppTheme.divider.withOpacity(0.72)),
-      ),
-      child: TextField(
-        controller: controller,
-        autofocus: autofocus,
-        minLines: 1,
-        maxLines: 1,
-        textInputAction: TextInputAction.done,
-        onSubmitted: onSubmitted,
-        style: const TextStyle(
-          color: AppTheme.ink,
-          fontSize: 17,
-          fontWeight: FontWeight.w700,
-        ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(
-            color: Color(0xFFD7C9D3),
-            fontWeight: FontWeight.w700,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.82),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: errorText == null
+                  ? AppTheme.divider.withOpacity(0.72)
+                  : const Color(0xFFE5486D),
+            ),
           ),
-          border: InputBorder.none,
+          child: TextField(
+            controller: controller,
+            autofocus: autofocus,
+            minLines: 1,
+            maxLines: 1,
+            textInputAction: TextInputAction.done,
+            onSubmitted: onSubmitted,
+            style: const TextStyle(
+              color: AppTheme.ink,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: const TextStyle(
+                color: Color(0xFFD7C9D3),
+                fontWeight: FontWeight.w700,
+              ),
+              border: InputBorder.none,
+            ),
+          ),
         ),
-      ),
+        if (errorText != null) ...<Widget>[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 18),
+            child: Text(
+              errorText!,
+              style: const TextStyle(
+                color: Color(0xFFE5486D),
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

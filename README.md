@@ -1,16 +1,47 @@
-# timer_app
+# Timer App 计时器
 
-A new Flutter project.
+一款基于 Flutter 的学习/专注计时应用，内置常用倒计时预设、批量秒表计时、计时统计与历史记录，数据全部保存在本地。
 
-## Getting Started
+## 功能特性
 
-This project is a starting point for a Flutter application.
+- **倒计时**：内置「刷牙」「番茄时钟」「练字」等常用预设，支持自定义时长；计时中提供全屏聚焦页面，结束时播放提示音。
+- **批量计时**：同时管理多个计时项，支持倒计时与秒表两种模式、卡片多选与批量启停。
+- **标签管理**：为秒表计时自定义标签（如「口算」「阅读」「运动」「学习」），支持新增、重命名、删除。
+- **统计洞察**：以日历形式回顾每天的计时情况，并按标签汇总时长与次数。
+- **历史记录**：完整保存每一次完成的计时。
+- **个性化设置**：多套配色主题、提示音开关、批量倒计时默认时长；设置页可一键复制反馈邮箱。
+- **本地存储**：通过 SQLite（sqflite）持久化，无需登录、无需联网。
 
-A few resources to get you started if this is your first Flutter project:
+## 快速开始
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+环境要求：Flutter 3.22+（Dart 3.4+）。
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+# 安装依赖
+flutter pub get
+
+# 运行（连接设备或启动模拟器后）
+flutter run
+
+# 运行单元测试
+flutter test
+```
+
+## 项目结构
+
+```
+lib/
+├── main.dart            # 应用入口
+├── app/                 # 根组件与全局状态
+├── data/                # 数据仓库（SQLite / 内存实现）
+├── models/              # 数据模型与默认预设
+├── pages/               # 各页面（计时、批量、统计、历史、创建、设置）
+├── services/            # 提示音等服务
+├── theme/               # 主题与配色
+├── utils/               # 工具函数
+└── widgets/             # 通用组件
+```
+
+## 反馈
+
+如有问题或功能建议，欢迎反馈：1838492264@qq.com

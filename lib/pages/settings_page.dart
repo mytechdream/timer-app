@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
@@ -25,10 +26,13 @@ class SettingsPage extends StatelessWidget {
   final ValueChanged<int> onPaletteChanged;
   final Future<void> Function(TimerSettings settings) onSettingsChanged;
 
+  static const String _feedbackEmail = '1838492264@qq.com';
+
   @override
   Widget build(BuildContext context) {
     return AppPage(
       title: '设置',
+      centerTitle: false,
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,10 +113,34 @@ class SettingsPage extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 18),
+            _SectionCard(
+              title: '反馈',
+              child: _SettingsRow(
+                key: const ValueKey<String>('feedback-email-row'),
+                icon: Icons.feedback_outlined,
+                title: '功能反馈',
+                value: _feedbackEmail,
+                onTap: () => _copyFeedbackEmail(context),
+                showDivider: false,
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _copyFeedbackEmail(BuildContext context) async {
+    await Clipboard.setData(const ClipboardData(text: _feedbackEmail));
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('反馈邮箱已复制')),
+      );
   }
 
   void _showDefaultCountdownSheet(BuildContext context) {
@@ -325,6 +353,7 @@ class _PaletteChip extends StatelessWidget {
 
 class _SettingsRow extends StatelessWidget {
   const _SettingsRow({
+    super.key,
     required this.icon,
     required this.title,
     this.value,
@@ -368,11 +397,16 @@ class _SettingsRow extends StatelessWidget {
             ),
           ),
           if (value != null)
-            Text(
-              value!,
-              style: const TextStyle(
-                color: AppTheme.mutedInk,
-                fontWeight: FontWeight.w700,
+            Flexible(
+              child: Text(
+                value!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: const TextStyle(
+                  color: AppTheme.mutedInk,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           if (trailing != null) trailing!,
@@ -396,6 +430,9 @@ class _SettingsRow extends StatelessWidget {
       return content;
     }
 
-    return InkWell(onTap: onTap, child: content);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(onTap: onTap, child: content),
+    );
   }
 }

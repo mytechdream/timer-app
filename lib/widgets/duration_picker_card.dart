@@ -28,6 +28,7 @@ class _DurationPickerCardState extends State<DurationPickerCard> {
   late int _hours;
   late int _minutes;
   late int _seconds;
+  bool _syncingSelection = false;
 
   @override
   void initState() {
@@ -74,20 +75,40 @@ class _DurationPickerCardState extends State<DurationPickerCard> {
   }
 
   void _jumpControllersToSelection() {
-    if (_hoursController.hasClients) {
-      _hoursController.jumpToItem(_hours);
-    }
-    if (_minutesController.hasClients) {
-      _minutesController.jumpToItem(_minutes);
-    }
-    if (_secondsController.hasClients) {
-      _secondsController.jumpToItem(_seconds);
+    _syncingSelection = true;
+    try {
+      if (_hoursController.hasClients) {
+        _hoursController.jumpToItem(_hours);
+      }
+      if (_minutesController.hasClients) {
+        _minutesController.jumpToItem(_minutes);
+      }
+      if (_secondsController.hasClients) {
+        _secondsController.jumpToItem(_seconds);
+      }
+    } finally {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _syncingSelection = false;
+        }
+      });
     }
   }
 
   void _emitChange() {
+    if (_syncingSelection) {
+      return;
+    }
     final int nextSeconds = _totalSeconds;
     widget.onChanged(nextSeconds == 0 ? 1 : nextSeconds);
+  }
+
+  void _handleWheelChanged(VoidCallback updatePart) {
+    if (_syncingSelection) {
+      return;
+    }
+    setState(updatePart);
+    _emitChange();
   }
 
   @override
@@ -124,8 +145,7 @@ class _DurationPickerCardState extends State<DurationPickerCard> {
                   unit: '小时',
                   controller: _hoursController,
                   onChanged: (int value) {
-                    setState(() => _hours = value);
-                    _emitChange();
+                    _handleWheelChanged(() => _hours = value);
                   },
                 ),
               ),
@@ -136,8 +156,7 @@ class _DurationPickerCardState extends State<DurationPickerCard> {
                   unit: '分钟',
                   controller: _minutesController,
                   onChanged: (int value) {
-                    setState(() => _minutes = value);
-                    _emitChange();
+                    _handleWheelChanged(() => _minutes = value);
                   },
                 ),
               ),
@@ -148,8 +167,7 @@ class _DurationPickerCardState extends State<DurationPickerCard> {
                   unit: '秒',
                   controller: _secondsController,
                   onChanged: (int value) {
-                    setState(() => _seconds = value);
-                    _emitChange();
+                    _handleWheelChanged(() => _seconds = value);
                   },
                 ),
               ),

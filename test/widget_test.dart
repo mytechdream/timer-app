@@ -471,6 +471,64 @@ void main() {
     expect(find.text('设置'), findsWidgets);
   });
 
+  testWidgets('insights calendar collapses and groups time by label',
+      (WidgetTester tester) async {
+    final repository = MemoryTimerRepository(
+      TimerSnapshot.initial().copyWith(
+        history: <TimerHistoryEntry>[
+          TimerHistoryEntry(
+            id: 'history-1',
+            name: '阅读',
+            mode: TimerRunMode.stopwatch,
+            durationSeconds: 2 * 60,
+            completedAt: DateTime(2026, 9, 2),
+          ),
+          TimerHistoryEntry(
+            id: 'history-2',
+            name: '口算',
+            mode: TimerRunMode.stopwatch,
+            durationSeconds: 60,
+            completedAt: DateTime(2026, 9, 2),
+          ),
+        ],
+      ),
+    );
+    await pumpTimerApp(tester, repository);
+
+    await tester.tap(find.byIcon(Icons.bar_chart_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('标签计时'), findsOneWidget);
+    expect(find.text('阅读'), findsOneWidget);
+    expect(find.text('口算'), findsOneWidget);
+    expect(find.text('02:00 · 1次'), findsOneWidget);
+    expect(find.text('01:00 · 1次'), findsOneWidget);
+    expect(find.text('周日'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.keyboard_arrow_up_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('周日'), findsNothing);
+    expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsOneWidget);
+  });
+
+  testWidgets('settings feedback shows qq email', (WidgetTester tester) async {
+    await pumpTimerApp(tester, MemoryTimerRepository());
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+    await tester.drag(
+        find.byType(SingleChildScrollView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    final Finder feedbackRow =
+        find.byKey(const ValueKey<String>('feedback-email-row'));
+    await tester.ensureVisible(feedbackRow);
+    await tester.pumpAndSettle();
+
+    expect(feedbackRow, findsOneWidget);
+    expect(find.text('1838492264@qq.com'), findsOneWidget);
+  });
+
   testWidgets('batch countdown starts in place instead of opening session',
       (WidgetTester tester) async {
     await pumpTimerApp(tester, MemoryTimerRepository());
@@ -645,6 +703,7 @@ void main() {
 
     final snapshot = await repository.load();
     expect(snapshot.timers.single.name, '煮鸡蛋');
-    expect(snapshot.timers.single.seconds, 5 * 60);
+    expect(snapshot.timers.single.seconds,
+        const TimerSettings().defaultCountdownSeconds);
   });
 }

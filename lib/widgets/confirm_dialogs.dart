@@ -17,11 +17,16 @@ Future<bool> showDeleteDialog({
   );
 }
 
-Future<bool> showExitTimerDialog(BuildContext context) {
+Future<bool> showExitTimerDialog(
+  BuildContext context, {
+  bool savesHistory = false,
+}) {
+  final String message =
+      savesHistory ? '退出后会停止当前正计时，并保存到历史记录。' : '退出后当前倒计时会停止，本次进度不会继续保留。';
   return showAppConfirmDialog(
     context: context,
     title: '退出计时？',
-    message: '退出后当前计时会停止，本次进度不会继续保留。',
+    message: message,
     actionLabel: '退出',
   );
 }

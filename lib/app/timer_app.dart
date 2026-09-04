@@ -90,12 +90,32 @@ class _TimerAppState extends State<TimerApp> {
   }
 
   Future<void> _createLabel(String label) async {
-    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
-    if (snapshot.labels.contains(label)) {
+    final String normalized = label.trim();
+    if (normalized.isEmpty) {
       return;
     }
+
+    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
+    if (snapshot.labels.contains(normalized)) {
+      return;
+    }
+
+    if (TimerDefaults.isDefaultLabel(normalized)) {
+      if (!snapshot.hiddenDefaultLabels.contains(normalized)) {
+        return;
+      }
+      await _saveSnapshot(
+        snapshot.copyWith(
+          hiddenDefaultLabels: snapshot.hiddenDefaultLabels
+              .where((String label) => label != normalized)
+              .toList(),
+        ),
+      );
+      return;
+    }
+
     await _saveSnapshot(
-      snapshot.copyWith(labels: <String>[...snapshot.labels, label]),
+      snapshot.copyWith(labels: <String>[...snapshot.labels, normalized]),
     );
   }
 
@@ -106,42 +126,40 @@ class _TimerAppState extends State<TimerApp> {
     }
 
     final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
-    final bool isStoredLabel = snapshot.labels.contains(oldLabel);
+    final List<String> labels = List<String>.of(snapshot.labels);
+    final List<String> hiddenDefaultLabels =
+        List<String>.of(snapshot.hiddenDefaultLabels);
+    final bool isStoredLabel = labels.contains(oldLabel);
     final bool isDefaultLabel = TimerDefaults.isDefaultLabel(oldLabel);
-    if (!isStoredLabel && !isDefaultLabel) {
+    final bool isVisibleDefaultLabel =
+        isDefaultLabel && !hiddenDefaultLabels.contains(oldLabel);
+    if (!isStoredLabel && !isVisibleDefaultLabel) {
       return;
     }
-    if (normalized != oldLabel && snapshot.labels.contains(normalized)) {
+    if (labels
+        .any((String label) => label == normalized && label != oldLabel)) {
       return;
     }
     if (normalized != oldLabel &&
         TimerDefaults.isDefaultLabel(normalized) &&
-        !snapshot.hiddenDefaultLabels.contains(normalized)) {
-      await _deleteLabel(oldLabel);
+        !hiddenDefaultLabels.contains(normalized)) {
       return;
     }
 
-    if (isDefaultLabel && !isStoredLabel) {
-      await _saveSnapshot(
-        snapshot.copyWith(
-          labels: normalized == oldLabel
-              ? snapshot.labels
-              : <String>[...snapshot.labels, normalized],
-          hiddenDefaultLabels: <String>{
-            ...snapshot.hiddenDefaultLabels,
-            oldLabel,
-          }.toList(),
-        ),
-      );
-      return;
+    labels.removeWhere((String label) => label == oldLabel);
+    if (isDefaultLabel) {
+      hiddenDefaultLabels.add(oldLabel);
+    }
+    if (TimerDefaults.isDefaultLabel(normalized)) {
+      hiddenDefaultLabels.removeWhere((String label) => label == normalized);
+    } else {
+      labels.add(normalized);
     }
 
     await _saveSnapshot(
       snapshot.copyWith(
-        labels: <String>[
-          for (final String label in snapshot.labels)
-            if (label == oldLabel) normalized else label,
-        ],
+        labels: labels.toSet().toList(),
+        hiddenDefaultLabels: hiddenDefaultLabels.toSet().toList(),
       ),
     );
   }
