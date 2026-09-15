@@ -23,18 +23,18 @@ class AppBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color primary = Theme.of(context).colorScheme.primary;
     return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      minimum: const EdgeInsets.fromLTRB(20, 0, 20, 14),
       child: Container(
-        height: 76,
+        height: 84,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.96),
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(32),
           boxShadow: <BoxShadow>[
             BoxShadow(
               color: Colors.black.withOpacity(0.08),
-              blurRadius: 30,
-              offset: const Offset(0, 14),
+              blurRadius: 34,
+              offset: const Offset(0, 16),
             ),
           ],
         ),
@@ -83,21 +83,21 @@ class _NavButton extends StatelessWidget {
       message: item.label,
       child: Material(
         color: active ? activeColor.withOpacity(0.12) : Colors.transparent,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(26),
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(26),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 Icon(
                   active ? item.activeIcon : item.icon,
-                  size: 24,
+                  size: 28,
                   color: active ? activeColor : AppTheme.ink,
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
@@ -105,7 +105,7 @@ class _NavButton extends StatelessWidget {
                     maxLines: 1,
                     style: TextStyle(
                       color: active ? activeColor : AppTheme.ink,
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w800,
                     ),
                   ),

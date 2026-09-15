@@ -18,8 +18,9 @@ Future<void> pumpTimerApp(
   WidgetTester tester,
   TimerRepository repository, {
   TimerAudio audio = const SilentTimerAudio(),
+  Size viewSize = const Size(430, 932),
 }) async {
-  tester.view.physicalSize = const Size(430, 932);
+  tester.view.physicalSize = viewSize;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -363,6 +364,8 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('默认倒计时'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('默认倒计时'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('25分钟').last);
@@ -471,11 +474,18 @@ void main() {
     expect(find.text('设置'), findsWidgets);
   });
 
-  testWidgets('insights calendar collapses and groups time by label',
+  testWidgets('insights calendar navigates, filters, and collapses',
       (WidgetTester tester) async {
     final repository = MemoryTimerRepository(
       TimerSnapshot.initial().copyWith(
         history: <TimerHistoryEntry>[
+          TimerHistoryEntry(
+            id: 'history-0',
+            name: '运动',
+            mode: TimerRunMode.stopwatch,
+            durationSeconds: 3 * 60,
+            completedAt: DateTime(2026, 8, 31),
+          ),
           TimerHistoryEntry(
             id: 'history-1',
             name: '阅读',
@@ -498,12 +508,37 @@ void main() {
     await tester.tap(find.byIcon(Icons.bar_chart_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.text('标签计时'), findsOneWidget);
+    expect(find.text('2026年8月30日 - 2026年9月5日'), findsOneWidget);
+    expect(find.text('2026年9月'), findsOneWidget);
+    expect(find.text('不同标签计时'), findsOneWidget);
+    expect(find.text('运动'), findsOneWidget);
     expect(find.text('阅读'), findsOneWidget);
     expect(find.text('口算'), findsOneWidget);
+    expect(find.text('03:00 · 1次'), findsOneWidget);
     expect(find.text('02:00 · 1次'), findsOneWidget);
     expect(find.text('01:00 · 1次'), findsOneWidget);
     expect(find.text('周日'), findsOneWidget);
+
+    await tester
+        .tap(find.byKey(const ValueKey<String>('insights-date-2026-9-10')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026年9月6日 - 2026年9月12日'), findsOneWidget);
+    expect(find.text('不同标签计时'), findsNothing);
+    expect(find.text('当前范围暂无计时记录'), findsNothing);
+    expect(find.text('阅读'), findsNothing);
+
+    await tester.tap(find.byTooltip('上个月'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026年8月'), findsOneWidget);
+
+    await tester.tap(find.text('月'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('不同标签计时'), findsOneWidget);
+    expect(find.text('运动'), findsOneWidget);
+    expect(find.text('03:00 · 1次'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.keyboard_arrow_up_rounded));
     await tester.pumpAndSettle();
@@ -512,21 +547,50 @@ void main() {
     expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsOneWidget);
   });
 
-  testWidgets('settings feedback shows qq email', (WidgetTester tester) async {
+  testWidgets('settings page matches target sections',
+      (WidgetTester tester) async {
     await pumpTimerApp(tester, MemoryTimerRepository());
 
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
-    await tester.drag(
-        find.byType(SingleChildScrollView), const Offset(0, -500));
-    await tester.pumpAndSettle();
-    final Finder feedbackRow =
-        find.byKey(const ValueKey<String>('feedback-email-row'));
-    await tester.ensureVisible(feedbackRow);
+
+    expect(find.text('配色'), findsOneWidget);
+    expect(find.text('提醒'), findsOneWidget);
+    expect(find.text('计时'), findsWidgets);
+    expect(find.text('功能反馈'), findsNothing);
+  });
+
+  testWidgets('settings row values align to the right edge',
+      (WidgetTester tester) async {
+    await pumpTimerApp(tester, MemoryTimerRepository());
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
 
-    expect(feedbackRow, findsOneWidget);
-    expect(find.text('1838492264@qq.com'), findsOneWidget);
+    final double reminderRight = tester.getTopRight(find.text('提示音 + 振动')).dx;
+    final double soundRight = tester.getTopRight(find.text('清脆铃声')).dx;
+
+    expect((reminderRight - soundRight).abs(), lessThan(1));
+  });
+
+  testWidgets('settings layout stays usable on small phones',
+      (WidgetTester tester) async {
+    await pumpTimerApp(
+      tester,
+      MemoryTimerRepository(),
+      viewSize: const Size(375, 812),
+    );
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('默认倒计时'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('默认倒计时'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('默认倒计时'), findsWidgets);
+    expect(find.text('25分钟'), findsOneWidget);
   });
 
   testWidgets('batch countdown starts in place instead of opening session',

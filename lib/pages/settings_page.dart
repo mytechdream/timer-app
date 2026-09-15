@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
@@ -26,14 +25,13 @@ class SettingsPage extends StatelessWidget {
   final ValueChanged<int> onPaletteChanged;
   final Future<void> Function(TimerSettings settings) onSettingsChanged;
 
-  static const String _feedbackEmail = '1838492264@qq.com';
-
   @override
   Widget build(BuildContext context) {
     return AppPage(
       title: '设置',
-      centerTitle: false,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
       child: SingleChildScrollView(
+        clipBehavior: Clip.none,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -62,7 +60,7 @@ class SettingsPage extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             _SectionCard(
               title: '提醒',
               child: Column(
@@ -92,7 +90,7 @@ class SettingsPage extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             _SectionCard(
               title: '计时',
               child: Column(
@@ -113,34 +111,10 @@ class SettingsPage extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 18),
-            _SectionCard(
-              title: '反馈',
-              child: _SettingsRow(
-                key: const ValueKey<String>('feedback-email-row'),
-                icon: Icons.feedback_outlined,
-                title: '功能反馈',
-                value: _feedbackEmail,
-                onTap: () => _copyFeedbackEmail(context),
-                showDivider: false,
-              ),
-            ),
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _copyFeedbackEmail(BuildContext context) async {
-    await Clipboard.setData(const ClipboardData(text: _feedbackEmail));
-    if (!context.mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('反馈邮箱已复制')),
-      );
   }
 
   void _showDefaultCountdownSheet(BuildContext context) {
@@ -277,12 +251,12 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           child,
         ],
       ),
@@ -303,45 +277,48 @@ class _PaletteChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final BorderRadius radius = BorderRadius.circular(24);
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: radius,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: radius,
         onTap: onTap,
         child: Container(
           constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            color: selected ? palette.primary.withOpacity(0.10) : Colors.white,
+            borderRadius: radius,
             border: Border.all(
               color: selected ? palette.primary : AppTheme.divider,
-              width: selected ? 1.5 : 1,
+              width: selected ? 2 : 1.5,
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Container(
-                width: 20,
-                height: 20,
+                width: 24,
+                height: 24,
                 decoration: BoxDecoration(
                   color: palette.primary,
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Text(
                 palette.name,
                 style: const TextStyle(
                   color: AppTheme.ink,
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               if (selected) ...<Widget>[
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Icon(Icons.check_circle_rounded,
-                    color: palette.primary, size: 18),
+                    color: palette.primary, size: 22),
               ],
             ],
           ),
@@ -353,7 +330,6 @@ class _PaletteChip extends StatelessWidget {
 
 class _SettingsRow extends StatelessWidget {
   const _SettingsRow({
-    super.key,
     required this.icon,
     required this.title,
     this.value,
@@ -372,32 +348,35 @@ class _SettingsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color primary = Theme.of(context).colorScheme.primary;
-    final Widget row = Padding(
+    final Widget row = Container(
+      constraints: const BoxConstraints(minHeight: 58),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: <Widget>[
           Container(
-            width: 38,
-            height: 38,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
               color: primary.withOpacity(0.11),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: primary, size: 22),
+            child: Icon(icon, color: primary, size: 24),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Text(
               title,
               style: const TextStyle(
                 color: AppTheme.ink,
-                fontSize: 16,
+                fontSize: 18,
                 fontWeight: FontWeight.w800,
               ),
             ),
           ),
-          if (value != null)
-            Flexible(
+          if (value != null) ...<Widget>[
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 128,
               child: Text(
                 value!,
                 maxLines: 1,
@@ -405,10 +384,12 @@ class _SettingsRow extends StatelessWidget {
                 textAlign: TextAlign.end,
                 style: const TextStyle(
                   color: AppTheme.mutedInk,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
+          ],
           if (trailing != null) trailing!,
           if (onTap != null) ...<Widget>[
             const SizedBox(width: 6),
@@ -422,7 +403,7 @@ class _SettingsRow extends StatelessWidget {
       children: <Widget>[
         row,
         if (showDivider)
-          const Divider(height: 1, indent: 52, color: AppTheme.divider),
+          const Divider(height: 1, indent: 58, color: AppTheme.divider),
       ],
     );
 
