@@ -8,14 +8,28 @@ import 'package:timezone/timezone.dart' as tz;
 abstract class TimerNotificationScheduler {
   Future<void> initialize();
 
-  Future<void> scheduleCountdownComplete({
+  Future<CountdownNotificationStatus> scheduleCountdownComplete({
+    required String notificationKey,
     required String timerName,
     required DateTime endAt,
     required bool vibrate,
     required bool preferExact,
   });
 
-  Future<void> cancelCountdownComplete();
+  Future<void> completeCountdown({
+    required String notificationKey,
+    required String timerName,
+    required bool vibrate,
+  });
+
+  Future<void> cancelCountdownComplete(String notificationKey);
+}
+
+enum CountdownNotificationStatus {
+  exact,
+  inexact,
+  permissionDenied,
+  unavailable,
 }
 
 class DisabledTimerNotificationScheduler implements TimerNotificationScheduler {
@@ -25,36 +39,50 @@ class DisabledTimerNotificationScheduler implements TimerNotificationScheduler {
   Future<void> initialize() async {}
 
   @override
-  Future<void> scheduleCountdownComplete({
+  Future<CountdownNotificationStatus> scheduleCountdownComplete({
+    required String notificationKey,
     required String timerName,
     required DateTime endAt,
     required bool vibrate,
     required bool preferExact,
+  }) async =>
+      CountdownNotificationStatus.unavailable;
+
+  @override
+  Future<void> completeCountdown({
+    required String notificationKey,
+    required String timerName,
+    required bool vibrate,
   }) async {}
 
   @override
-  Future<void> cancelCountdownComplete() async {}
+  Future<void> cancelCountdownComplete(String notificationKey) async {}
 }
 
 class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
   LocalTimerNotificationScheduler({FlutterLocalNotificationsPlugin? plugin})
       : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
-  static const int _countdownNotificationId = 1001;
-  static const String _channelId = 'timer_alerts';
-  static const String _channelName = '计时提醒';
+  static const String _soundChannelId = 'timer_alerts_sound';
+  static const String _vibrationChannelId = 'timer_alerts_vibration';
 
   final FlutterLocalNotificationsPlugin _plugin;
+  final Set<String> _scheduledKeys = <String>{};
+  final Map<String, int> _notificationIds = <String, int>{};
+  Future<void> _operationTail = Future<void>.value();
   Future<void>? _initializing;
   bool _initialized = false;
   bool _timeZonesInitialized = false;
+  bool _exactPermissionRequestAttempted = false;
 
   @override
   Future<void> initialize() {
     if (kIsWeb) {
       return Future<void>.value();
     }
-    return _initializing ??= _initializePlugin();
+    return _initializing ??= _initializePlugin().whenComplete(() {
+      _initializing = null;
+    });
   }
 
   Future<void> _initializePlugin() async {
@@ -76,120 +104,180 @@ class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
         iOS: darwinSettings,
         macOS: darwinSettings,
       );
-      await _plugin.initialize(settings);
-      _initialized = true;
+      _initialized = await _plugin.initialize(settings) ?? false;
     } on Object {
       _initialized = false;
     }
   }
 
   @override
-  Future<void> scheduleCountdownComplete({
+  Future<CountdownNotificationStatus> scheduleCountdownComplete({
+    required String notificationKey,
     required String timerName,
     required DateTime endAt,
     required bool vibrate,
     required bool preferExact,
-  }) async {
-    if (kIsWeb || !endAt.isAfter(DateTime.now())) {
-      return;
-    }
-    await initialize();
-    if (!_initialized) {
-      return;
-    }
+  }) =>
+      _enqueue(() async {
+        if (kIsWeb || !endAt.isAfter(DateTime.now())) {
+          return CountdownNotificationStatus.unavailable;
+        }
+        await initialize();
+        if (!_initialized) {
+          return CountdownNotificationStatus.unavailable;
+        }
 
-    final bool notificationPermissionGranted =
-        await _requestNotificationPermission();
-    if (!notificationPermissionGranted) {
-      return;
-    }
+        final int id = _idForKey(notificationKey);
+        try {
+          await _plugin.cancel(id);
+        } on Object {
+          return CountdownNotificationStatus.unavailable;
+        }
+        _scheduledKeys.remove(notificationKey);
 
-    final AndroidScheduleMode androidScheduleMode =
-        await _androidScheduleMode(preferExact: preferExact);
-    try {
-      await _plugin.zonedSchedule(
-        _countdownNotificationId,
-        '计时结束',
-        '「$timerName」已完成',
-        tz.TZDateTime.from(endAt, tz.local),
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channelId,
-            _channelName,
-            channelDescription: '倒计时结束时提醒用户',
-            importance: Importance.max,
-            priority: Priority.high,
-            playSound: true,
-            enableVibration: vibrate,
-            category: AndroidNotificationCategory.alarm,
-          ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBanner: true,
-            presentList: true,
-            presentSound: true,
-          ),
-          macOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBanner: true,
-            presentList: true,
-            presentSound: true,
-          ),
-        ),
-        androidScheduleMode: androidScheduleMode,
-      );
-    } on Object {
-      if (androidScheduleMode == AndroidScheduleMode.inexactAllowWhileIdle) {
-        return;
-      }
-      await _plugin.zonedSchedule(
-        _countdownNotificationId,
-        '计时结束',
-        '「$timerName」已完成',
-        tz.TZDateTime.from(endAt, tz.local),
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channelId,
-            _channelName,
-            channelDescription: '倒计时结束时提醒用户',
-            importance: Importance.max,
-            priority: Priority.high,
-            playSound: true,
-            enableVibration: vibrate,
-            category: AndroidNotificationCategory.alarm,
-          ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBanner: true,
-            presentList: true,
-            presentSound: true,
-          ),
-          macOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBanner: true,
-            presentList: true,
-            presentSound: true,
-          ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      );
-    }
-  }
+        final bool notificationPermissionGranted =
+            await _requestNotificationPermission();
+        if (!notificationPermissionGranted) {
+          return CountdownNotificationStatus.permissionDenied;
+        }
+
+        final AndroidScheduleMode androidScheduleMode =
+            await _androidScheduleMode(preferExact: preferExact);
+        try {
+          await _plugin.zonedSchedule(
+            id,
+            '计时结束',
+            '「$timerName」已完成',
+            tz.TZDateTime.from(endAt, tz.local),
+            _details(vibrate),
+            androidScheduleMode: androidScheduleMode,
+          );
+          _scheduledKeys.add(notificationKey);
+          return androidScheduleMode == AndroidScheduleMode.exactAllowWhileIdle
+              ? CountdownNotificationStatus.exact
+              : CountdownNotificationStatus.inexact;
+        } on Object {
+          if (androidScheduleMode ==
+              AndroidScheduleMode.inexactAllowWhileIdle) {
+            return CountdownNotificationStatus.unavailable;
+          }
+          try {
+            await _plugin.zonedSchedule(
+              id,
+              '计时结束',
+              '「$timerName」已完成',
+              tz.TZDateTime.from(endAt, tz.local),
+              _details(vibrate),
+              androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            );
+            _scheduledKeys.add(notificationKey);
+            return CountdownNotificationStatus.inexact;
+          } on Object {
+            return CountdownNotificationStatus.unavailable;
+          }
+        }
+      });
 
   @override
-  Future<void> cancelCountdownComplete() async {
-    if (kIsWeb) {
-      return;
+  Future<void> completeCountdown({
+    required String notificationKey,
+    required String timerName,
+    required bool vibrate,
+  }) =>
+      _enqueue(() async {
+        await initialize();
+        if (kIsWeb || !_initialized) {
+          return;
+        }
+        if (!_scheduledKeys.contains(notificationKey)) {
+          return;
+        }
+        final int id = _idForKey(notificationKey);
+        try {
+          final List<PendingNotificationRequest> pending =
+              await _plugin.pendingNotificationRequests();
+          if (!pending
+              .any((PendingNotificationRequest item) => item.id == id)) {
+            return;
+          }
+          await _plugin.cancel(id);
+          await _plugin.show(
+            id,
+            '计时结束',
+            '「$timerName」已完成',
+            _details(vibrate),
+          );
+        } on Object {
+          return;
+        } finally {
+          _scheduledKeys.remove(notificationKey);
+        }
+      });
+
+  @override
+  Future<void> cancelCountdownComplete(String notificationKey) =>
+      _enqueue(() async {
+        if (kIsWeb) {
+          return;
+        }
+        await initialize();
+        if (!_initialized) {
+          return;
+        }
+        try {
+          await _plugin.cancel(_idForKey(notificationKey));
+        } on Object {
+          return;
+        } finally {
+          _scheduledKeys.remove(notificationKey);
+        }
+      });
+
+  NotificationDetails _details(bool vibrate) => NotificationDetails(
+        android: AndroidNotificationDetails(
+          vibrate ? _vibrationChannelId : _soundChannelId,
+          vibrate ? '计时提醒（声音和振动）' : '计时提醒（声音）',
+          channelDescription: '倒计时结束时提醒用户',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: vibrate,
+          category: AndroidNotificationCategory.alarm,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBanner: true,
+          presentList: true,
+          presentSound: true,
+        ),
+        macOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBanner: true,
+          presentList: true,
+          presentSound: true,
+        ),
+      );
+
+  int _idForKey(String key) {
+    final int? existing = _notificationIds[key];
+    if (existing != null) {
+      return existing;
     }
-    await initialize();
-    if (!_initialized) {
-      return;
+    int id = countdownNotificationId(key);
+    while (id == 1001 || id == 2001 || _notificationIds.values.contains(id)) {
+      id = (id + 1) & 0x7fffffff;
+      if (id == 0) {
+        id = 1;
+      }
     }
-    try {
-      await _plugin.cancel(_countdownNotificationId);
-    } on Object {
-      return;
-    }
+    _notificationIds[key] = id;
+    return id;
+  }
+
+  Future<T> _enqueue<T>(Future<T> Function() operation) {
+    final Future<T> result = _operationTail.then((_) => operation());
+    _operationTail = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
   }
 
   Future<bool> _requestNotificationPermission() async {
@@ -245,6 +333,10 @@ class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
       if (canScheduleExact == true) {
         return AndroidScheduleMode.exactAllowWhileIdle;
       }
+      if (_exactPermissionRequestAttempted) {
+        return AndroidScheduleMode.inexactAllowWhileIdle;
+      }
+      _exactPermissionRequestAttempted = true;
       final bool? exactGranted =
           await androidPlugin.requestExactAlarmsPermission();
       return exactGranted == true
@@ -262,6 +354,16 @@ class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
     tz_data.initializeTimeZones();
     _timeZonesInitialized = true;
   }
+}
+
+@visibleForTesting
+int countdownNotificationId(String key) {
+  int hash = 0x811c9dc5;
+  for (final int codeUnit in key.codeUnits) {
+    hash = ((hash ^ codeUnit) * 0x01000193) & 0xffffffff;
+  }
+  final int id = hash & 0x7fffffff;
+  return id == 0 ? 1 : id;
 }
 
 TimerNotificationScheduler buildDefaultNotificationScheduler() {

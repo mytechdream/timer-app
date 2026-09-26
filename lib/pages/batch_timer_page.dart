@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/timer_models.dart';
+import '../services/timer_notifications.dart';
 import '../theme/app_theme.dart';
 import '../utils/time_format.dart';
 import '../widgets/app_page.dart';
@@ -20,6 +21,9 @@ class BatchTimerPage extends StatefulWidget {
     required this.hiddenDefaultTimerIds,
     required this.hiddenDefaultLabels,
     required this.defaultCountdownSeconds,
+    required this.settings,
+    required this.notifications,
+    this.now,
     required this.onCreateTimer,
     required this.onDeleteTimer,
     required this.onCreateLabel,
@@ -32,6 +36,9 @@ class BatchTimerPage extends StatefulWidget {
   final List<String> hiddenDefaultTimerIds;
   final List<String> hiddenDefaultLabels;
   final int defaultCountdownSeconds;
+  final TimerSettings settings;
+  final TimerNotificationScheduler notifications;
+  final DateTime Function()? now;
   final Future<void> Function(String name, int seconds) onCreateTimer;
   final Future<void> Function(String id) onDeleteTimer;
   final Future<void> Function(String label) onCreateLabel;
@@ -51,6 +58,28 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
       <String, _CountdownBatchState>{};
   final Map<String, _StopwatchBatchState> _stopwatchStates =
       <String, _StopwatchBatchState>{};
+  final Map<String, CountdownNotificationStatus> _notificationStatuses =
+      <String, CountdownNotificationStatus>{};
+
+  DateTime get _now => widget.now?.call() ?? DateTime.now();
+
+  String _notificationKey(String id) => 'batch:$id';
+
+  String? get _reminderWarning {
+    if (_notificationStatuses.values
+        .contains(CountdownNotificationStatus.permissionDenied)) {
+      return '通知权限未开启，计时结束时可能收不到系统提醒';
+    }
+    if (_notificationStatuses.values
+        .contains(CountdownNotificationStatus.unavailable)) {
+      return '系统提醒暂不可用，请检查通知权限';
+    }
+    if (_notificationStatuses.values
+        .contains(CountdownNotificationStatus.inexact)) {
+      return '精确提醒未获授权，后台通知可能延迟';
+    }
+    return null;
+  }
 
   List<CreatedTimer> get _countdownTimers {
     final Set<String> hiddenDefaultIds = widget.hiddenDefaultTimerIds.toSet();
@@ -134,24 +163,46 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
     super.didUpdateWidget(oldWidget);
     _syncBatchStates();
     _syncTicker();
+    if (oldWidget.settings.completionReminderName !=
+        widget.settings.completionReminderName) {
+      for (final CreatedTimer timer in _countdownTimers) {
+        if (_countdownStates[timer.id]?.running ?? false) {
+          unawaited(_scheduleCountdown(timer));
+        }
+      }
+    }
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
+    for (final MapEntry<String, _CountdownBatchState> entry
+        in _countdownStates.entries) {
+      if (entry.value.running) {
+        unawaited(widget.notifications
+            .cancelCountdownComplete(_notificationKey(entry.key)));
+      }
+    }
     super.dispose();
   }
 
   void _syncBatchStates() {
     final Set<String> countdownIds =
         _countdownTimers.map((CreatedTimer timer) => timer.id).toSet();
-    _countdownStates.removeWhere(
-      (String id, _) => !countdownIds.contains(id),
-    );
+    _countdownStates.removeWhere((String id, _CountdownBatchState state) {
+      if (countdownIds.contains(id)) {
+        return false;
+      }
+      _cancelCountdown(id);
+      return true;
+    });
 
     for (final CreatedTimer timer in _countdownTimers) {
       final _CountdownBatchState? existing = _countdownStates[timer.id];
       if (existing == null || existing.initialSeconds != timer.seconds) {
+        if (existing != null) {
+          _cancelCountdown(timer.id);
+        }
         _countdownStates[timer.id] = _CountdownBatchState(
           initialSeconds: timer.seconds,
           remainingSeconds: timer.seconds,
@@ -179,22 +230,34 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
     _ticker = null;
   }
 
-  void _tick() {
+  void _tick() => _syncRunningTimers();
+
+  void _syncRunningTimers({bool advanceStopwatches = true}) {
     if (!mounted) {
       return;
     }
 
+    final DateTime now = _now;
+    final Map<String, CreatedTimer> timersById = <String, CreatedTimer>{
+      for (final CreatedTimer timer in _countdownTimers) timer.id: timer,
+    };
+    final List<CreatedTimer> completed = <CreatedTimer>[];
     setState(() {
       _countdownStates.updateAll(
-        (_, _CountdownBatchState state) {
-          if (!state.running) {
+        (String id, _CountdownBatchState state) {
+          if (!state.running || state.endAt == null) {
             return state;
           }
-          final int nextRemaining = math.max(0, state.remainingSeconds - 1);
+          final int nextRemaining = _secondsRemaining(state.endAt!, now);
           if (nextRemaining == 0) {
+            final CreatedTimer? timer = timersById[id];
+            if (timer != null) {
+              completed.add(timer);
+            }
             return state.copyWith(
               remainingSeconds: state.initialSeconds,
               running: false,
+              clearEndAt: true,
             );
           }
           return state.copyWith(
@@ -203,13 +266,62 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
           );
         },
       );
-      _stopwatchStates.updateAll(
-        (_, _StopwatchBatchState state) => state.running
-            ? state.copyWith(elapsedSeconds: state.elapsedSeconds + 1)
-            : state,
-      );
+      if (advanceStopwatches) {
+        _stopwatchStates.updateAll(
+          (_, _StopwatchBatchState state) => state.running
+              ? state.copyWith(elapsedSeconds: state.elapsedSeconds + 1)
+              : state,
+        );
+      }
     });
     _syncTicker();
+    for (final CreatedTimer timer in completed) {
+      _notificationStatuses.remove(timer.id);
+      if (widget.settings.completionReminderName != TimerSettings.reminderOff) {
+        unawaited(widget.notifications.completeCountdown(
+          notificationKey: _notificationKey(timer.id),
+          timerName: timer.name,
+          vibrate: widget.settings.completionReminderName ==
+              TimerSettings.reminderSoundAndVibration,
+        ));
+      } else {
+        _cancelCountdown(timer.id);
+      }
+    }
+  }
+
+  int _secondsRemaining(DateTime endAt, DateTime now) =>
+      math.max(0, (endAt.difference(now).inMilliseconds + 999) ~/ 1000);
+
+  Future<void> _scheduleCountdown(CreatedTimer timer) async {
+    final _CountdownBatchState? state = _countdownStates[timer.id];
+    if (state == null || !state.running || state.endAt == null) {
+      return;
+    }
+    if (widget.settings.completionReminderName == TimerSettings.reminderOff) {
+      _cancelCountdown(timer.id);
+      return;
+    }
+    final DateTime endAt = state.endAt!;
+    final CountdownNotificationStatus status =
+        await widget.notifications.scheduleCountdownComplete(
+      notificationKey: _notificationKey(timer.id),
+      timerName: timer.name,
+      endAt: endAt,
+      vibrate: widget.settings.completionReminderName ==
+          TimerSettings.reminderSoundAndVibration,
+      preferExact: true,
+    );
+    if (!mounted || _countdownStates[timer.id]?.endAt != endAt) {
+      return;
+    }
+    setState(() => _notificationStatuses[timer.id] = status);
+  }
+
+  void _cancelCountdown(String id) {
+    _notificationStatuses.remove(id);
+    unawaited(
+        widget.notifications.cancelCountdownComplete(_notificationKey(id)));
   }
 
   void _setModeIndex(int index) {
@@ -273,16 +385,35 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
   }
 
   void _toggleCountdownRunning(String id) {
+    final bool wasRunning = _countdownStates[id]!.running;
+    if (wasRunning) {
+      _syncRunningTimers(advanceStopwatches: false);
+      if (!(_countdownStates[id]?.running ?? false)) {
+        return;
+      }
+    }
+    final CreatedTimer timer =
+        _countdownTimers.firstWhere((CreatedTimer timer) => timer.id == id);
+    final DateTime now = _now;
     setState(() {
       final _CountdownBatchState state = _countdownStates[id]!;
-      final bool shouldRun = !state.running;
+      final int remainingSeconds = wasRunning && state.endAt != null
+          ? _secondsRemaining(state.endAt!, now)
+          : state.remainingSeconds;
+      final int runSeconds =
+          remainingSeconds == 0 ? state.initialSeconds : remainingSeconds;
       _countdownStates[id] = state.copyWith(
-        remainingSeconds: state.remainingSeconds == 0
-            ? state.initialSeconds
-            : state.remainingSeconds,
-        running: shouldRun,
+        remainingSeconds: runSeconds,
+        running: !wasRunning,
+        endAt: wasRunning ? null : now.add(Duration(seconds: runSeconds)),
+        clearEndAt: wasRunning,
       );
     });
+    if (wasRunning) {
+      _cancelCountdown(id);
+    } else {
+      unawaited(_scheduleCountdown(timer));
+    }
     _syncTicker();
   }
 
@@ -300,8 +431,10 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
       _countdownStates[id] = state.copyWith(
         remainingSeconds: state.initialSeconds,
         running: false,
+        clearEndAt: true,
       );
     });
+    _cancelCountdown(id);
     _syncTicker();
   }
 
@@ -317,16 +450,24 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
   }
 
   void _startAllVisible() {
+    final DateTime now = _now;
+    final List<CreatedTimer> started = <CreatedTimer>[];
     setState(() {
       if (_isCountdownMode) {
         for (final CreatedTimer timer in _countdownTimers) {
           final _CountdownBatchState state = _countdownStates[timer.id]!;
+          if (state.running) {
+            continue;
+          }
+          final int remainingSeconds = state.remainingSeconds == 0
+              ? state.initialSeconds
+              : state.remainingSeconds;
           _countdownStates[timer.id] = state.copyWith(
-            remainingSeconds: state.remainingSeconds == 0
-                ? state.initialSeconds
-                : state.remainingSeconds,
+            remainingSeconds: remainingSeconds,
             running: true,
+            endAt: now.add(Duration(seconds: remainingSeconds)),
           );
+          started.add(timer);
         }
       } else {
         for (final String label in _stopwatchLabels) {
@@ -336,16 +477,33 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
         }
       }
     });
+    for (final CreatedTimer timer in started) {
+      unawaited(_scheduleCountdown(timer));
+    }
     _syncTicker();
   }
 
   void _pauseAllVisible() {
+    if (_isCountdownMode) {
+      _syncRunningTimers(advanceStopwatches: false);
+    }
+    final DateTime now = _now;
+    final List<String> paused = <String>[];
     setState(() {
       if (_isCountdownMode) {
         for (final CreatedTimer timer in _countdownTimers) {
-          _countdownStates[timer.id] = _countdownStates[timer.id]!.copyWith(
+          final _CountdownBatchState state = _countdownStates[timer.id]!;
+          if (!state.running) {
+            continue;
+          }
+          _countdownStates[timer.id] = state.copyWith(
+            remainingSeconds: state.endAt == null
+                ? state.remainingSeconds
+                : _secondsRemaining(state.endAt!, now),
             running: false,
+            clearEndAt: true,
           );
+          paused.add(timer.id);
         }
       } else {
         for (final String label in _stopwatchLabels) {
@@ -355,10 +513,14 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
         }
       }
     });
+    for (final String id in paused) {
+      _cancelCountdown(id);
+    }
     _syncTicker();
   }
 
   void _resetAllVisible() {
+    final List<String> reset = <String>[];
     setState(() {
       if (_isCountdownMode) {
         for (final CreatedTimer timer in _countdownTimers) {
@@ -366,7 +528,9 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
           _countdownStates[timer.id] = state.copyWith(
             remainingSeconds: state.initialSeconds,
             running: false,
+            clearEndAt: true,
           );
+          reset.add(timer.id);
         }
       } else {
         for (final String label in _stopwatchLabels) {
@@ -377,6 +541,9 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
         }
       }
     });
+    for (final String id in reset) {
+      _cancelCountdown(id);
+    }
     _syncTicker();
   }
 
@@ -404,6 +571,7 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
           .map((CreatedTimer timer) => timer.id)
           .toList();
       for (final String id in ids) {
+        _cancelCountdown(id);
         await widget.onDeleteTimer(id);
       }
     } else {
@@ -450,6 +618,17 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
             selectedIndex: _modeIndex,
             onChanged: _setModeIndex,
           ),
+          if (_reminderWarning != null) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              _reminderWarning!,
+              style: const TextStyle(
+                color: Color(0xFF9B5C16),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
           const SizedBox(height: 32),
           Expanded(
             child: _isCountdownMode ? _buildCountdowns() : _buildStopwatches(),
@@ -523,6 +702,7 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
     if (!shouldDelete) {
       return;
     }
+    _cancelCountdown(timer.id);
     await widget.onDeleteTimer(timer.id);
   }
 }
@@ -533,24 +713,29 @@ class _CountdownBatchState {
     required this.remainingSeconds,
     this.running = false,
     this.selected = false,
+    this.endAt,
   });
 
   final int initialSeconds;
   final int remainingSeconds;
   final bool running;
   final bool selected;
+  final DateTime? endAt;
 
   _CountdownBatchState copyWith({
     int? initialSeconds,
     int? remainingSeconds,
     bool? running,
     bool? selected,
+    DateTime? endAt,
+    bool clearEndAt = false,
   }) {
     return _CountdownBatchState(
       initialSeconds: initialSeconds ?? this.initialSeconds,
       remainingSeconds: remainingSeconds ?? this.remainingSeconds,
       running: running ?? this.running,
       selected: selected ?? this.selected,
+      endAt: clearEndAt ? null : (endAt ?? this.endAt),
     );
   }
 }

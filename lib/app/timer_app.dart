@@ -53,7 +53,6 @@ class _TimerAppState extends State<TimerApp> {
 
   @override
   void dispose() {
-    unawaited(_notifications.cancelCountdownComplete());
     unawaited(_foregroundService.stop());
     _audio.dispose();
     super.dispose();

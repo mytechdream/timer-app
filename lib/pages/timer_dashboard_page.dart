@@ -357,6 +357,21 @@ class _RunningTimerPageState extends State<RunningTimerPage> {
             ),
           ],
         ),
+        if (_session.reminderWarning != null) ...<Widget>[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              _session.reminderWarning!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF9B5C16),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ],
     );
 
@@ -939,7 +954,10 @@ class TimerSession extends ChangeNotifier {
     this.notifications = const DisabledTimerNotificationScheduler(),
     this.foregroundService = const DisabledTimerForegroundService(),
     DateTime Function()? now,
-  }) : displaySeconds = mode == TimerRunMode.countdown ? initialSeconds : 0 {
+    String? notificationKey,
+  })  : notificationKey = notificationKey ??
+            'session-${DateTime.now().microsecondsSinceEpoch}-${_nextNotificationKey++}',
+        displaySeconds = mode == TimerRunMode.countdown ? initialSeconds : 0 {
     _now = now ?? DateTime.now;
     _runStartedAt = _now();
     _secondsAtRunStart = displaySeconds;
@@ -957,16 +975,42 @@ class TimerSession extends ChangeNotifier {
   final Future<void> Function(TimerHistoryEntry entry) onCompleted;
   final TimerNotificationScheduler notifications;
   final TimerForegroundService foregroundService;
+  final String notificationKey;
+
+  static int _nextNotificationKey = 0;
 
   int displaySeconds;
   bool running = true;
   bool _completed = false;
+  bool _hasCompletedCountdown = false;
+  bool _disposed = false;
+  int _notificationGeneration = 0;
+  CountdownNotificationStatus? notificationStatus;
   Timer? _ticker;
   late final DateTime Function() _now;
   DateTime? _runStartedAt;
   int _secondsAtRunStart = 0;
 
   bool get _isCountdown => mode == TimerRunMode.countdown;
+
+  String? get reminderWarning {
+    if (!_isCountdown ||
+        !running ||
+        settings.completionReminderName == TimerSettings.reminderOff) {
+      return null;
+    }
+    switch (notificationStatus) {
+      case CountdownNotificationStatus.inexact:
+        return '精确提醒未获授权，后台通知可能延迟';
+      case CountdownNotificationStatus.permissionDenied:
+        return '通知权限未开启，计时结束时可能收不到系统提醒';
+      case CountdownNotificationStatus.unavailable:
+        return '系统提醒暂不可用，请检查通知权限';
+      case CountdownNotificationStatus.exact:
+      case null:
+        return null;
+    }
+  }
 
   DateTime? get countdownEndAt {
     if (!_isCountdown || !running || _runStartedAt == null) {
@@ -987,6 +1031,7 @@ class TimerSession extends ChangeNotifier {
     }
     running = !running;
     if (running) {
+      _hasCompletedCountdown = false;
       _runStartedAt = _now();
       _secondsAtRunStart = displaySeconds;
       _ensureTicker();
@@ -996,7 +1041,8 @@ class TimerSession extends ChangeNotifier {
       _runStartedAt = null;
       _ticker?.cancel();
       _ticker = null;
-      unawaited(notifications.cancelCountdownComplete());
+      _clearNotificationStatus();
+      unawaited(notifications.cancelCountdownComplete(notificationKey));
       unawaited(foregroundService.stop());
     }
     notifyListeners();
@@ -1008,6 +1054,7 @@ class TimerSession extends ChangeNotifier {
       return;
     }
     name = nextName;
+    unawaited(_scheduleCountdownNotification());
     notifyListeners();
   }
 
@@ -1019,8 +1066,10 @@ class TimerSession extends ChangeNotifier {
     settings = value;
     notifyListeners();
     await onSettingsChanged(value);
-    if (reminderChanged || backgroundRunChanged) {
+    if (reminderChanged) {
       unawaited(_scheduleCountdownNotification());
+    }
+    if (backgroundRunChanged) {
       unawaited(_updateForegroundService());
     }
   }
@@ -1032,7 +1081,9 @@ class TimerSession extends ChangeNotifier {
   }
 
   void reset() {
-    unawaited(notifications.cancelCountdownComplete());
+    _clearNotificationStatus();
+    _hasCompletedCountdown = false;
+    unawaited(notifications.cancelCountdownComplete(notificationKey));
     unawaited(foregroundService.stop());
     displaySeconds = _isCountdown ? initialSeconds : 0;
     running = true;
@@ -1073,7 +1124,7 @@ class TimerSession extends ChangeNotifier {
     _runStartedAt = null;
     _ticker?.cancel();
     _ticker = null;
-    await notifications.cancelCountdownComplete();
+    await notifications.cancelCountdownComplete(notificationKey);
     await foregroundService.stop();
     notifyListeners();
     await onCompleted(
@@ -1128,24 +1179,43 @@ class TimerSession extends ChangeNotifier {
   }
 
   Future<void> _scheduleCountdownNotification() async {
+    final int generation = ++_notificationGeneration;
+    if (_hasCompletedCountdown) {
+      return;
+    }
     if (!_isCountdown ||
         !running ||
         _completed ||
         settings.completionReminderName == TimerSettings.reminderOff) {
-      await notifications.cancelCountdownComplete();
+      notificationStatus = null;
+      await notifications.cancelCountdownComplete(notificationKey);
       return;
     }
     _syncDisplay();
     if (_completed || displaySeconds <= 0) {
       return;
     }
-    await notifications.scheduleCountdownComplete(
+    final CountdownNotificationStatus status =
+        await notifications.scheduleCountdownComplete(
+      notificationKey: notificationKey,
       timerName: name,
       endAt: _now().add(Duration(seconds: displaySeconds)),
       vibrate: settings.completionReminderName ==
           TimerSettings.reminderSoundAndVibration,
-      preferExact: settings.backgroundRunEnabled,
+      preferExact: true,
     );
+    if (!_disposed &&
+        generation == _notificationGeneration &&
+        running &&
+        !_completed) {
+      notificationStatus = status;
+      notifyListeners();
+    }
+  }
+
+  void _clearNotificationStatus() {
+    _notificationGeneration++;
+    notificationStatus = null;
   }
 
   Future<void> _updateForegroundService() async {
@@ -1166,10 +1236,21 @@ class TimerSession extends ChangeNotifier {
       return;
     }
     _completed = true;
+    _hasCompletedCountdown = true;
+    _clearNotificationStatus();
     _runStartedAt = null;
     _ticker?.cancel();
     _ticker = null;
-    await notifications.cancelCountdownComplete();
+    if (settings.completionReminderName != TimerSettings.reminderOff) {
+      unawaited(notifications.completeCountdown(
+        notificationKey: notificationKey,
+        timerName: name,
+        vibrate: settings.completionReminderName ==
+            TimerSettings.reminderSoundAndVibration,
+      ));
+    } else {
+      unawaited(notifications.cancelCountdownComplete(notificationKey));
+    }
     await foregroundService.stop();
     if (settings.completionSoundEnabled &&
         settings.completionReminderName != TimerSettings.reminderOff) {
@@ -1193,10 +1274,13 @@ class TimerSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _runStartedAt = null;
     _ticker?.cancel();
     _ticker = null;
-    unawaited(notifications.cancelCountdownComplete());
+    if (_isCountdown && !_hasCompletedCountdown) {
+      unawaited(notifications.cancelCountdownComplete(notificationKey));
+    }
     unawaited(foregroundService.stop());
     super.dispose();
   }

@@ -86,6 +86,9 @@ class _HomeShellState extends State<HomeShell> {
                 hiddenDefaultLabels: widget.snapshot.hiddenDefaultLabels,
                 defaultCountdownSeconds:
                     widget.snapshot.settings.defaultCountdownSeconds,
+                settings: widget.snapshot.settings,
+                notifications: widget.notifications,
+                now: widget.now,
                 onCreateTimer: widget.onCreateTimer,
                 onDeleteTimer: widget.onDeleteTimer,
                 onCreateLabel: widget.onCreateLabel,
