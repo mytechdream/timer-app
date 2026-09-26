@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
+import '../services/timer_foreground_service.dart';
+import '../services/timer_notifications.dart';
 import '../theme/app_theme.dart';
 import '../utils/time_format.dart';
 import '../widgets/app_page.dart';
@@ -805,34 +807,23 @@ class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
                           ),
                         ),
                         const SizedBox(width: 28),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            _FullscreenIconButton(
-                              icon: Icons.replay_rounded,
-                              tooltip: '重置',
-                              onPressed: _session.reset,
+                        SizedBox(
+                          width: 82,
+                          height: 82,
+                          child: IconButton(
+                            tooltip: _session.running ? '暂停' : '继续',
+                            onPressed: _session.toggleRunning,
+                            icon: Icon(
+                              _session.running
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              size: _session.running ? 36 : 44,
                             ),
-                            const SizedBox(height: 18),
-                            SizedBox(
-                              width: 82,
-                              height: 82,
-                              child: IconButton(
-                                tooltip: _session.running ? '暂停' : '继续',
-                                onPressed: _session.toggleRunning,
-                                icon: Icon(
-                                  _session.running
-                                      ? Icons.pause_rounded
-                                      : Icons.play_arrow_rounded,
-                                  size: _session.running ? 36 : 44,
-                                ),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: primary,
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
+                            style: IconButton.styleFrom(
+                              backgroundColor: primary,
+                              foregroundColor: Colors.white,
                             ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
@@ -945,8 +936,16 @@ class TimerSession extends ChangeNotifier {
     required this.audio,
     required this.onSettingsChanged,
     required this.onCompleted,
+    this.notifications = const DisabledTimerNotificationScheduler(),
+    this.foregroundService = const DisabledTimerForegroundService(),
+    DateTime Function()? now,
   }) : displaySeconds = mode == TimerRunMode.countdown ? initialSeconds : 0 {
+    _now = now ?? DateTime.now;
+    _runStartedAt = _now();
+    _secondsAtRunStart = displaySeconds;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    unawaited(_scheduleCountdownNotification());
+    unawaited(_updateForegroundService());
   }
 
   final TimerRunMode mode;
@@ -956,21 +955,50 @@ class TimerSession extends ChangeNotifier {
   final TimerAudio audio;
   final Future<void> Function(TimerSettings settings) onSettingsChanged;
   final Future<void> Function(TimerHistoryEntry entry) onCompleted;
+  final TimerNotificationScheduler notifications;
+  final TimerForegroundService foregroundService;
 
   int displaySeconds;
   bool running = true;
   bool _completed = false;
   Timer? _ticker;
+  late final DateTime Function() _now;
+  DateTime? _runStartedAt;
+  int _secondsAtRunStart = 0;
 
   bool get _isCountdown => mode == TimerRunMode.countdown;
+
+  DateTime? get countdownEndAt {
+    if (!_isCountdown || !running || _runStartedAt == null) {
+      return null;
+    }
+    return _runStartedAt!.add(Duration(seconds: _secondsAtRunStart));
+  }
 
   void toggleRunning() {
     if (_completed && _isCountdown) {
       reset();
       return;
     }
+
+    _syncDisplay();
+    if (_completed) {
+      return;
+    }
     running = !running;
-    _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    if (running) {
+      _runStartedAt = _now();
+      _secondsAtRunStart = displaySeconds;
+      _ensureTicker();
+      unawaited(_scheduleCountdownNotification());
+      unawaited(_updateForegroundService());
+    } else {
+      _runStartedAt = null;
+      _ticker?.cancel();
+      _ticker = null;
+      unawaited(notifications.cancelCountdownComplete());
+      unawaited(foregroundService.stop());
+    }
     notifyListeners();
   }
 
@@ -984,9 +1012,17 @@ class TimerSession extends ChangeNotifier {
   }
 
   Future<void> updateSettings(TimerSettings value) async {
+    final bool reminderChanged =
+        value.completionReminderName != settings.completionReminderName;
+    final bool backgroundRunChanged =
+        value.backgroundRunEnabled != settings.backgroundRunEnabled;
     settings = value;
     notifyListeners();
     await onSettingsChanged(value);
+    if (reminderChanged || backgroundRunChanged) {
+      unawaited(_scheduleCountdownNotification());
+      unawaited(_updateForegroundService());
+    }
   }
 
   Future<void> toggleTickSound() async {
@@ -996,10 +1032,16 @@ class TimerSession extends ChangeNotifier {
   }
 
   void reset() {
+    unawaited(notifications.cancelCountdownComplete());
+    unawaited(foregroundService.stop());
     displaySeconds = _isCountdown ? initialSeconds : 0;
     running = true;
     _completed = false;
-    _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    _runStartedAt = _now();
+    _secondsAtRunStart = displaySeconds;
+    _ensureTicker();
+    unawaited(_scheduleCountdownNotification());
+    unawaited(_updateForegroundService());
     notifyListeners();
   }
 
@@ -1007,18 +1049,32 @@ class TimerSession extends ChangeNotifier {
     if (!_isCountdown || _completed) {
       return;
     }
+    _syncDisplay();
+    if (_completed) {
+      return;
+    }
     displaySeconds += seconds;
+    _secondsAtRunStart = displaySeconds;
+    if (running) {
+      _runStartedAt = _now();
+    }
+    unawaited(_scheduleCountdownNotification());
+    unawaited(_updateForegroundService());
     notifyListeners();
   }
 
   Future<void> saveStopwatchHistoryOnExit() async {
+    _syncDisplay();
     if (_isCountdown || displaySeconds <= 0 || _completed) {
       return;
     }
     _completed = true;
     running = false;
+    _runStartedAt = null;
     _ticker?.cancel();
     _ticker = null;
+    await notifications.cancelCountdownComplete();
+    await foregroundService.stop();
     notifyListeners();
     await onCompleted(
       TimerHistoryEntry(
@@ -1036,19 +1092,73 @@ class TimerSession extends ChangeNotifier {
       return;
     }
 
-    if (_isCountdown) {
-      displaySeconds = math.max(0, displaySeconds - 1);
-    } else {
-      displaySeconds += 1;
+    final int before = displaySeconds;
+    _syncDisplay();
+    if (_completed) {
+      return;
     }
     if (settings.tickSoundEnabled && (!_isCountdown || displaySeconds > 0)) {
       unawaited(audio.playTick());
     }
-    notifyListeners();
-
-    if (_isCountdown && displaySeconds == 0) {
-      _completeCountdown();
+    if (before != displaySeconds) {
+      notifyListeners();
     }
+    unawaited(_updateForegroundService());
+  }
+
+  void _syncDisplay() {
+    if (!running || _completed || _runStartedAt == null) {
+      return;
+    }
+    final int elapsedSeconds = math.max(
+      0,
+      _now().difference(_runStartedAt!).inSeconds,
+    );
+    final int nextDisplaySeconds = _isCountdown
+        ? math.max(0, _secondsAtRunStart - elapsedSeconds)
+        : _secondsAtRunStart + elapsedSeconds;
+    displaySeconds = nextDisplaySeconds;
+    if (_isCountdown && nextDisplaySeconds == 0) {
+      unawaited(_completeCountdown());
+    }
+  }
+
+  void _ensureTicker() {
+    _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  Future<void> _scheduleCountdownNotification() async {
+    if (!_isCountdown ||
+        !running ||
+        _completed ||
+        settings.completionReminderName == TimerSettings.reminderOff) {
+      await notifications.cancelCountdownComplete();
+      return;
+    }
+    _syncDisplay();
+    if (_completed || displaySeconds <= 0) {
+      return;
+    }
+    await notifications.scheduleCountdownComplete(
+      timerName: name,
+      endAt: _now().add(Duration(seconds: displaySeconds)),
+      vibrate: settings.completionReminderName ==
+          TimerSettings.reminderSoundAndVibration,
+      preferExact: settings.backgroundRunEnabled,
+    );
+  }
+
+  Future<void> _updateForegroundService() async {
+    if (!running || _completed || !settings.backgroundRunEnabled) {
+      await foregroundService.stop();
+      return;
+    }
+    await foregroundService.start(
+      title: name,
+      body: _isCountdown
+          ? '剩余 ${formatDigitalTime(displaySeconds)}'
+          : '已计时 ${formatDigitalTime(displaySeconds)}',
+    );
   }
 
   Future<void> _completeCountdown() async {
@@ -1056,8 +1166,11 @@ class TimerSession extends ChangeNotifier {
       return;
     }
     _completed = true;
+    _runStartedAt = null;
     _ticker?.cancel();
     _ticker = null;
+    await notifications.cancelCountdownComplete();
+    await foregroundService.stop();
     if (settings.completionSoundEnabled &&
         settings.completionReminderName != TimerSettings.reminderOff) {
       await audio.playComplete(settings.alertSoundName);
@@ -1072,6 +1185,7 @@ class TimerSession extends ChangeNotifier {
       ),
     );
     displaySeconds = initialSeconds;
+    _secondsAtRunStart = displaySeconds;
     running = false;
     _completed = false;
     notifyListeners();
@@ -1079,8 +1193,11 @@ class TimerSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    _runStartedAt = null;
     _ticker?.cancel();
     _ticker = null;
+    unawaited(notifications.cancelCountdownComplete());
+    unawaited(foregroundService.stop());
     super.dispose();
   }
 }

@@ -4,7 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:timer_app/app/timer_app.dart';
 import 'package:timer_app/data/timer_repository.dart';
 import 'package:timer_app/models/timer_models.dart';
+import 'package:timer_app/pages/timer_dashboard_page.dart';
 import 'package:timer_app/services/timer_audio.dart';
+import 'package:timer_app/services/timer_foreground_service.dart';
+import 'package:timer_app/services/timer_notifications.dart';
 
 Finder get addTimerButton => find.byWidgetPredicate(
       (widget) => widget is IconButton && widget.tooltip == '创建倒计时',
@@ -19,6 +22,7 @@ Future<void> pumpTimerApp(
   TimerRepository repository, {
   TimerAudio audio = const SilentTimerAudio(),
   Size viewSize = const Size(430, 932),
+  DateTime Function()? now,
 }) async {
   tester.view.physicalSize = viewSize;
   tester.view.devicePixelRatio = 1;
@@ -26,7 +30,13 @@ Future<void> pumpTimerApp(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    TimerApp(repository: repository, audio: audio),
+    TimerApp(
+      repository: repository,
+      audio: audio,
+      notifications: const DisabledTimerNotificationScheduler(),
+      foregroundService: const DisabledTimerForegroundService(),
+      now: now ?? tester.binding.clock.now,
+    ),
   );
   await tester.pumpAndSettle();
 }
@@ -67,6 +77,30 @@ Future<void> openHistoryPage(WidgetTester tester) async {
 }
 
 void main() {
+  test('timer session catches up from timestamps after a missed tick', () {
+    final DateTime start = DateTime(2026, 9, 18, 9, 0);
+    DateTime now = start;
+    final TimerSession session = TimerSession(
+      mode: TimerRunMode.countdown,
+      name: '时间戳测试',
+      initialSeconds: 10,
+      settings: const TimerSettings(),
+      audio: const SilentTimerAudio(),
+      notifications: const DisabledTimerNotificationScheduler(),
+      foregroundService: const DisabledTimerForegroundService(),
+      onSettingsChanged: (_) async {},
+      onCompleted: (_) async {},
+      now: () => now,
+    );
+
+    now = start.add(const Duration(seconds: 3));
+    session.toggleRunning();
+
+    expect(session.displaySeconds, 7);
+    expect(session.running, isFalse);
+    session.dispose();
+  });
+
   testWidgets('shows timer home and bottom navigation',
       (WidgetTester tester) async {
     await pumpTimerApp(tester, MemoryTimerRepository());
@@ -339,6 +373,9 @@ void main() {
       ),
       findsOneWidget,
     );
+    // Fullscreen intentionally omits the reset button: only pause/resume stays.
+    expect(find.byTooltip('重置'), findsNothing);
+    expect(find.byIcon(Icons.replay_rounded), findsNothing);
     tester.widget<IconButton>(iconButtonWithTooltip('关闭全屏')).onPressed?.call();
     await tester.pumpAndSettle();
   });

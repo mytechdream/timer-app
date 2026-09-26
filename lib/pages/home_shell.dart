@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
+import '../services/timer_foreground_service.dart';
+import '../services/timer_notifications.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'batch_timer_page.dart';
@@ -16,6 +18,9 @@ class HomeShell extends StatefulWidget {
     super.key,
     required this.snapshot,
     required this.audio,
+    required this.notifications,
+    required this.foregroundService,
+    this.now,
     required this.paletteIndex,
     required this.onPaletteChanged,
     required this.onCreateTimer,
@@ -30,6 +35,9 @@ class HomeShell extends StatefulWidget {
 
   final TimerSnapshot snapshot;
   final TimerAudio audio;
+  final TimerNotificationScheduler notifications;
+  final TimerForegroundService foregroundService;
+  final DateTime Function()? now;
   final int paletteIndex;
   final ValueChanged<int> onPaletteChanged;
   final Future<void> Function(String name, int seconds) onCreateTimer;
@@ -113,6 +121,9 @@ class _HomeShellState extends State<HomeShell> {
       initialSeconds: seconds,
       settings: widget.snapshot.settings,
       audio: widget.audio,
+      notifications: widget.notifications,
+      foregroundService: widget.foregroundService,
+      now: widget.now,
       onSettingsChanged: widget.onSettingsChanged,
       onCompleted: widget.onHistoryEntry,
     );

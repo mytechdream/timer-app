@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -5,6 +7,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import '../data/timer_repository.dart';
 import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
+import '../services/timer_foreground_service.dart';
+import '../services/timer_notifications.dart';
 import '../theme/app_theme.dart';
 import '../pages/home_shell.dart';
 
@@ -13,10 +17,16 @@ class TimerApp extends StatefulWidget {
     super.key,
     required this.repository,
     this.audio,
+    this.notifications,
+    this.foregroundService,
+    this.now,
   });
 
   final TimerRepository repository;
   final TimerAudio? audio;
+  final TimerNotificationScheduler? notifications;
+  final TimerForegroundService? foregroundService;
+  final DateTime Function()? now;
 
   @override
   State<TimerApp> createState() => _TimerAppState();
@@ -25,17 +35,26 @@ class TimerApp extends StatefulWidget {
 class _TimerAppState extends State<TimerApp> {
   TimerSnapshot? _snapshot;
   late final TimerAudio _audio;
+  late final TimerNotificationScheduler _notifications;
+  late final TimerForegroundService _foregroundService;
   int _paletteIndex = 1;
 
   @override
   void initState() {
     super.initState();
     _audio = widget.audio ?? AudioplayersTimerAudio();
+    _notifications =
+        widget.notifications ?? buildDefaultNotificationScheduler();
+    _foregroundService =
+        widget.foregroundService ?? buildDefaultForegroundService();
+    unawaited(_notifications.initialize());
     _load();
   }
 
   @override
   void dispose() {
+    unawaited(_notifications.cancelCountdownComplete());
+    unawaited(_foregroundService.stop());
     _audio.dispose();
     super.dispose();
   }
@@ -232,6 +251,9 @@ class _TimerAppState extends State<TimerApp> {
           : HomeShell(
               snapshot: _snapshot!,
               audio: _audio,
+              notifications: _notifications,
+              foregroundService: _foregroundService,
+              now: widget.now,
               paletteIndex: _paletteIndex,
               onPaletteChanged: (int index) =>
                   setState(() => _paletteIndex = index),
