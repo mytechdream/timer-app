@@ -54,6 +54,16 @@ flutter build apk --release
 
 Release APK 默认输出到：`build/app/outputs/flutter-apk/app-release.apk`。
 
+## 自动发布 Android 安装包
+
+每次推送到 `main`，GitHub Actions 会执行代码检查、测试和 Release APK 构建，成功后更新固定的 [`latest` Release](https://github.com/mytechdream/timer-app/releases/tag/latest)。下载链接为 [timer-app-latest.apk](https://github.com/mytechdream/timer-app/releases/download/latest/timer-app-latest.apk)，同时提供 SHA-256 校验文件。
+
+发布流程见 [android-release.yml](.github/workflows/android-release.yml)。也可以在 [Actions 页面](https://github.com/mytechdream/timer-app/actions/workflows/android-release.yml)选择 `main`，点击 **Run workflow** 手动运行。较早提交的构建如果发现 `main` 已有新提交，会跳过发布，由新提交更新安装包；历史版本 Release 继续保留。
+
+APK 版本名称取自 `pubspec.yaml`，构建号为其中的基础构建号加上工作流运行序号。例如 `1.1.0+2` 在首次自动构建时生成 `1.1.0+3`，后续运行递增。更新 `pubspec.yaml` 时，基础构建号应保持递增。
+
+自动构建通过仓库 Secret `ANDROID_DEBUG_KEYSTORE_BASE64` 复用现有安装包的签名密钥，发布前会校验 APK 签名，保证已安装版本可以覆盖升级。Secret 内容是现有 `debug.keystore` 的 Base64 编码，密钥文件不提交到仓库。迁移仓库或更换构建环境时，需要在 **Settings → Secrets and variables → Actions** 配置同名 Secret。
+
 ## 项目结构
 
 ```

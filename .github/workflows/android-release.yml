@@ -1,0 +1,168 @@
+name: Android Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Finish an active publication before the next push can replace its assets.
+concurrency:
+  group: android-release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Restore existing APK signing key
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "$ANDROID_DEBUG_KEYSTORE_BASE64" ]]; then
+            echo "::error::Configure the ANDROID_DEBUG_KEYSTORE_BASE64 repository secret with the existing APK signing key."
+            exit 1
+          fi
+          umask 077
+          mkdir -p "$HOME/.android"
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" \
+            -storepass android -alias androiddebugkey > /dev/null
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.22.3'
+          channel: stable
+          cache: true
+
+      - name: Configure Android build downloads
+        run: |
+          # Use upstream repositories on GitHub runners; local mirrors remain unchanged.
+          sed -i '/maven { url "https:\/\/maven\.aliyun\.com/d' android/build.gradle android/settings.gradle
+          sed -i 's|mirrors.cloud.tencent.com/gradle/|services.gradle.org/distributions/|' \
+            android/gradle/wrapper/gradle-wrapper.properties
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;26.2.11394342"
+
+      - name: Resolve APK version
+        id: version
+        run: |
+          version="$(awk '/^version:/ { print $2; exit }' pubspec.yaml)"
+          version_name="${version%%+*}"
+          base_build="${version##*+}"
+          if [[ "$version_name" == "$version" || ! "$base_build" =~ ^[0-9]+$ ]]; then
+            echo "::error::pubspec.yaml must declare version: <version-name>+<build-number>."
+            exit 1
+          fi
+          build_number=$((10#$base_build + GITHUB_RUN_NUMBER))
+          if (( build_number > 2100000000 )); then
+            echo "::error::Android versionCode exceeds the supported maximum."
+            exit 1
+          fi
+          printf 'version_name=%s\nbuild_number=%s\n' "$version_name" "$build_number" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze code
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build release APK
+        env:
+          APK_VERSION: ${{ steps.version.outputs.version_name }}
+          APK_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: |
+          flutter build apk --release --no-pub \
+            --build-name "$APK_VERSION" --build-number "$APK_BUILD_NUMBER"
+
+      - name: Verify and package APK
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/timer-app-latest.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
+            dist/timer-app-latest.apk | tee "$RUNNER_TEMP/apk-signature.txt"
+          expected="$(keytool -list -v -keystore "$HOME/.android/debug.keystore" \
+            -storepass android -alias androiddebugkey | awk '/SHA256:/ { gsub(/:/, "", $2); print tolower($2) }')"
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-signature.txt")"
+          if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+            echo "::error::APK signature does not match the configured signing key."
+            exit 1
+          fi
+          (cd dist && sha256sum timer-app-latest.apk > timer-app-latest.apk.sha256)
+
+      - name: Save build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: timer-app-${{ steps.version.outputs.version_name }}-build-${{ steps.version.outputs.build_number }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Update latest GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APK_VERSION: ${{ steps.version.outputs.version_name }}
+          APK_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: |
+          current_sha="$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')"
+          if [[ "$current_sha" != "$GITHUB_SHA" ]]; then
+            echo "A newer main commit exists; its build will update the release."
+            echo "Skipped release publication because main has a newer commit." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          notes_file="$RUNNER_TEMP/release-notes.md"
+          checksum="$(cut -d ' ' -f 1 dist/timer-app-latest.apk.sha256)"
+          printf '%s\n' \
+            '每次推送到 main 后，GitHub Actions 自动更新此安装包。' \
+            '' \
+            "- 版本：${APK_VERSION}+${APK_BUILD_NUMBER}" \
+            "- 提交：${GITHUB_SHA}" \
+            "- 构建：[查看 Actions](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})" \
+            "- APK SHA-256：${checksum}" \
+            '- 已通过代码检查、测试及 APK 签名校验。' > "$notes_file"
+
+          if gh api "repos/$GH_REPO/git/ref/tags/latest" > /dev/null 2>&1; then
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/latest" \
+              -f "sha=$GITHUB_SHA" -F force=true > /dev/null
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f ref=refs/tags/latest -f "sha=$GITHUB_SHA" > /dev/null
+          fi
+
+          if gh release view latest > /dev/null 2>&1; then
+            gh release upload latest dist/timer-app-latest.apk dist/timer-app-latest.apk.sha256 --clobber
+            gh release edit latest --title "Timer App 最新自动构建" --notes-file "$notes_file" --latest
+          else
+            gh release create latest dist/timer-app-latest.apk dist/timer-app-latest.apk.sha256 \
+              --verify-tag --title "Timer App 最新自动构建" --notes-file "$notes_file" --latest
+          fi
+
+          release_url="$(gh release view latest --json url --jq '.url')"
+          printf '%s\n' "Published ${APK_VERSION}+${APK_BUILD_NUMBER}: ${release_url}" >> "$GITHUB_STEP_SUMMARY"
