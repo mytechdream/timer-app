@@ -64,7 +64,21 @@ jobs:
           sed -i '/maven { url "https:\/\/maven\.aliyun\.com/d' android/build.gradle android/settings.gradle
           sed -i 's|mirrors.cloud.tencent.com/gradle/|services.gradle.org/distributions/|' \
             android/gradle/wrapper/gradle-wrapper.properties
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;26.2.11394342"
+          sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$sdkmanager_path" ]]; then
+            for candidate in "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager; do
+              if [[ -x "$candidate" ]]; then
+                sdkmanager_path="$candidate"
+                break
+              fi
+            done
+          fi
+          if [[ ! -x "$sdkmanager_path" ]]; then
+            echo "::error::Android SDK command-line tools are missing from $ANDROID_HOME."
+            exit 1
+          fi
+          "$sdkmanager_path" --sdk_root="$ANDROID_HOME" --install \
+            "platforms;android-35" "build-tools;35.0.0" "ndk;26.2.11394342"
 
       - name: Resolve APK version
         id: version
