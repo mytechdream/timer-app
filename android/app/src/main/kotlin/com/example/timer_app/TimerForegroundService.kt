@@ -62,7 +62,7 @@ class TimerForegroundService : Service() {
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_timer)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(pendingIntent)

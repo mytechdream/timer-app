@@ -8,6 +8,8 @@ import 'package:timezone/timezone.dart' as tz;
 abstract class TimerNotificationScheduler {
   Future<void> initialize();
 
+  Future<bool> requestNotificationPermission();
+
   Future<CountdownNotificationStatus> scheduleCountdownComplete({
     required String notificationKey,
     required String timerName,
@@ -37,6 +39,9 @@ class DisabledTimerNotificationScheduler implements TimerNotificationScheduler {
 
   @override
   Future<void> initialize() async {}
+
+  @override
+  Future<bool> requestNotificationPermission() async => false;
 
   @override
   Future<CountdownNotificationStatus> scheduleCountdownComplete({
@@ -71,6 +76,7 @@ class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
   final Map<String, int> _notificationIds = <String, int>{};
   Future<void> _operationTail = Future<void>.value();
   Future<void>? _initializing;
+  Future<bool>? _requestingPermission;
   bool _initialized = false;
   bool _timeZonesInitialized = false;
   bool _exactPermissionRequestAttempted = false;
@@ -92,7 +98,7 @@ class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
     _ensureTimeZones();
     try {
       const AndroidInitializationSettings androidSettings =
-          AndroidInitializationSettings('ic_launcher');
+          AndroidInitializationSettings('ic_stat_timer');
       const DarwinInitializationSettings darwinSettings =
           DarwinInitializationSettings(
         requestAlertPermission: false,
@@ -108,6 +114,24 @@ class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
     } on Object {
       _initialized = false;
     }
+  }
+
+  @override
+  Future<bool> requestNotificationPermission() {
+    if (kIsWeb) {
+      return Future<bool>.value(false);
+    }
+    // Startup and a newly started timer can overlap while the system prompt is
+    // open. Share that request instead of asking the Android plugin twice.
+    return _requestingPermission ??=
+        _initializeAndRequestPermission().whenComplete(() {
+      _requestingPermission = null;
+    });
+  }
+
+  Future<bool> _initializeAndRequestPermission() async {
+    await initialize();
+    return _initialized && await _requestNotificationPermission();
   }
 
   @override
@@ -136,7 +160,7 @@ class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
         _scheduledKeys.remove(notificationKey);
 
         final bool notificationPermissionGranted =
-            await _requestNotificationPermission();
+            await requestNotificationPermission();
         if (!notificationPermissionGranted) {
           return CountdownNotificationStatus.permissionDenied;
         }

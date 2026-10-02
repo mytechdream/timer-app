@@ -64,6 +64,16 @@ class _TimerAppState extends State<TimerApp> {
       return;
     }
     setState(() => _snapshot = snapshot);
+    // Wait until the loaded home screen is visible before the OS permission UI.
+    // Exact-alarm access remains a separate request when a countdown is started.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          snapshot.settings.completionSoundEnabled &&
+          snapshot.settings.completionReminderName !=
+              TimerSettings.reminderOff) {
+        unawaited(_notifications.requestNotificationPermission());
+      }
+    });
   }
 
   Future<void> _saveSnapshot(TimerSnapshot snapshot) async {

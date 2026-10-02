@@ -1003,7 +1003,7 @@ class TimerSession extends ChangeNotifier {
       case CountdownNotificationStatus.inexact:
         return '精确提醒未获授权，后台通知可能延迟';
       case CountdownNotificationStatus.permissionDenied:
-        return '通知权限未开启，计时结束时可能收不到系统提醒';
+        return '通知权限未开启，请在系统设置中允许计时器发送通知';
       case CountdownNotificationStatus.unavailable:
         return '系统提醒暂不可用，请检查通知权限';
       case CountdownNotificationStatus.exact:

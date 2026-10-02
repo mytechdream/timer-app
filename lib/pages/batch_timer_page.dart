@@ -68,7 +68,7 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
   String? get _reminderWarning {
     if (_notificationStatuses.values
         .contains(CountdownNotificationStatus.permissionDenied)) {
-      return '通知权限未开启，计时结束时可能收不到系统提醒';
+      return '通知权限未开启，请在系统设置中允许计时器发送通知';
     }
     if (_notificationStatuses.values
         .contains(CountdownNotificationStatus.unavailable)) {

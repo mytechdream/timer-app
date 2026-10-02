@@ -29,6 +29,10 @@ class _RecordingNotifications implements TimerNotificationScheduler {
   Future<void> initialize() async {}
 
   @override
+  Future<bool> requestNotificationPermission() async =>
+      status != CountdownNotificationStatus.permissionDenied;
+
+  @override
   Future<CountdownNotificationStatus> scheduleCountdownComplete({
     required String notificationKey,
     required String timerName,

@@ -119,6 +119,12 @@ jobs:
         run: |
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk dist/timer-app-latest.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump resources \
+            dist/timer-app-latest.apk > "$RUNNER_TEMP/apk-resources.txt"
+          if ! grep -q 'drawable/ic_stat_timer' "$RUNNER_TEMP/apk-resources.txt"; then
+            echo "::error::Release APK is missing the notification icon drawable/ic_stat_timer."
+            exit 1
+          fi
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
             dist/timer-app-latest.apk | tee "$RUNNER_TEMP/apk-signature.txt"
           expected="$(keytool -list -v -keystore "$ANDROID_SIGNING_KEYSTORE_PATH" \
