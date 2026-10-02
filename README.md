@@ -62,7 +62,7 @@ Release APK 默认输出到：`build/app/outputs/flutter-apk/app-release.apk`。
 
 APK 版本名称取自 `pubspec.yaml`，构建号为其中的基础构建号加上工作流运行序号。例如 `1.1.0+2` 在首次自动构建时生成 `1.1.0+3`，后续运行递增。更新 `pubspec.yaml` 时，基础构建号应保持递增。
 
-自动构建通过仓库 Secret `ANDROID_DEBUG_KEYSTORE_BASE64` 复用现有安装包的签名密钥，发布前会校验 APK 签名，保证已安装版本可以覆盖升级。Secret 内容是现有 `debug.keystore` 的 Base64 编码，密钥文件不提交到仓库。迁移仓库或更换构建环境时，需要在 **Settings → Secrets and variables → Actions** 配置同名 Secret。
+自动构建通过仓库 Secret `ANDROID_DEBUG_KEYSTORE_BASE64` 复用现有安装包的签名密钥。工作流将密钥解码到临时文件，并通过 `ANDROID_SIGNING_KEYSTORE_PATH` 显式传给 Gradle，发布前会校验 APK 签名，保证已安装版本可以覆盖升级。Secret 内容是现有 `debug.keystore` 的 Base64 编码，密钥文件不提交到仓库。迁移仓库或更换构建环境时，需要在 **Settings → Secrets and variables → Actions** 配置同名 Secret。
 
 ## 项目结构
 
