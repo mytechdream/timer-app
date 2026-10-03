@@ -9,6 +9,7 @@ import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
 import '../services/timer_foreground_service.dart';
 import '../services/timer_notifications.dart';
+import '../services/timer_vibration.dart';
 import '../theme/app_theme.dart';
 import '../pages/home_shell.dart';
 
@@ -19,6 +20,7 @@ class TimerApp extends StatefulWidget {
     this.audio,
     this.notifications,
     this.foregroundService,
+    this.vibration,
     this.now,
   });
 
@@ -26,6 +28,7 @@ class TimerApp extends StatefulWidget {
   final TimerAudio? audio;
   final TimerNotificationScheduler? notifications;
   final TimerForegroundService? foregroundService;
+  final TimerVibration? vibration;
   final DateTime Function()? now;
 
   @override
@@ -37,6 +40,7 @@ class _TimerAppState extends State<TimerApp> {
   late final TimerAudio _audio;
   late final TimerNotificationScheduler _notifications;
   late final TimerForegroundService _foregroundService;
+  late final TimerVibration _vibration;
   int _paletteIndex = 1;
 
   @override
@@ -47,6 +51,7 @@ class _TimerAppState extends State<TimerApp> {
         widget.notifications ?? buildDefaultNotificationScheduler();
     _foregroundService =
         widget.foregroundService ?? buildDefaultForegroundService();
+    _vibration = widget.vibration ?? const AndroidTimerVibration();
     unawaited(_notifications.initialize());
     _load();
   }
@@ -262,6 +267,7 @@ class _TimerAppState extends State<TimerApp> {
               audio: _audio,
               notifications: _notifications,
               foregroundService: _foregroundService,
+              vibration: _vibration,
               now: widget.now,
               paletteIndex: _paletteIndex,
               onPaletteChanged: (int index) =>

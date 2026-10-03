@@ -12,6 +12,7 @@ import 'package:timer_app/models/timer_models.dart';
 import 'package:timer_app/services/timer_audio.dart';
 import 'package:timer_app/services/timer_foreground_service.dart';
 import 'package:timer_app/services/timer_notifications.dart';
+import 'package:timer_app/services/timer_vibration.dart';
 
 const MethodChannel _notificationChannel =
     MethodChannel('dexterous.com/flutter/local_notifications');
@@ -100,6 +101,46 @@ void main() {
     expect(status, CountdownNotificationStatus.exact);
     expect(
         calls.map((MethodCall call) => call.method), contains('zonedSchedule'));
+  });
+
+  test('a background vibration reminder supplies an explicit waveform',
+      () async {
+    await LocalTimerNotificationScheduler().scheduleCountdownComplete(
+      notificationKey: 'android-vibration-regression',
+      timerName: '振动测试',
+      endAt: DateTime.utc(2100, 1, 1),
+      vibrate: true,
+      preferExact: true,
+    );
+    final MethodCall scheduled =
+        calls.singleWhere((MethodCall call) => call.method == 'zonedSchedule');
+    final Map<dynamic, dynamic> details =
+        scheduled.arguments['platformSpecifics'];
+    expect(details['enableVibration'], isTrue);
+    expect(details['vibrationPattern'], isA<List<int>>(),
+        reason: 'The alert must specify its waveform instead of relying on '
+            'a device-specific default vibration pattern.');
+    expect(details['vibrationPattern'], isNotEmpty);
+    expect(details['vibrationPattern'], countdownVibrationPattern);
+    expect(details['channelId'], 'timer_alerts_vibration_v2');
+    expect(details['audioAttributesUsage'], AudioAttributesUsage.alarm.value);
+  });
+
+  test('sound-only reminders do not acquire a vibration waveform', () async {
+    await LocalTimerNotificationScheduler().scheduleCountdownComplete(
+      notificationKey: 'android-sound-only-regression',
+      timerName: '仅声音',
+      endAt: DateTime.utc(2100, 1, 1),
+      vibrate: false,
+      preferExact: true,
+    );
+    final MethodCall scheduled =
+        calls.singleWhere((MethodCall call) => call.method == 'zonedSchedule');
+    final Map<dynamic, dynamic> details =
+        scheduled.arguments['platformSpecifics'];
+    expect(details['enableVibration'], isFalse);
+    expect(details['vibrationPattern'], isNull);
+    expect(details['channelId'], 'timer_alerts_sound');
   });
 
   testWidgets('opening the app reaches notification permission without a timer',

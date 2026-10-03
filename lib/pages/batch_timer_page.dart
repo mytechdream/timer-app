@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../models/timer_models.dart';
 import '../services/timer_notifications.dart';
+import '../services/timer_vibration.dart';
 import '../theme/app_theme.dart';
 import '../utils/time_format.dart';
 import '../widgets/app_page.dart';
@@ -23,6 +24,7 @@ class BatchTimerPage extends StatefulWidget {
     required this.defaultCountdownSeconds,
     required this.settings,
     required this.notifications,
+    this.vibration = const AndroidTimerVibration(),
     this.now,
     required this.onCreateTimer,
     required this.onDeleteTimer,
@@ -38,6 +40,7 @@ class BatchTimerPage extends StatefulWidget {
   final int defaultCountdownSeconds;
   final TimerSettings settings;
   final TimerNotificationScheduler notifications;
+  final TimerVibration vibration;
   final DateTime Function()? now;
   final Future<void> Function(String name, int seconds) onCreateTimer;
   final Future<void> Function(String id) onDeleteTimer;
@@ -241,7 +244,8 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
     final Map<String, CreatedTimer> timersById = <String, CreatedTimer>{
       for (final CreatedTimer timer in _countdownTimers) timer.id: timer,
     };
-    final List<CreatedTimer> completed = <CreatedTimer>[];
+    final List<({CreatedTimer timer, DateTime endAt})> completed =
+        <({CreatedTimer timer, DateTime endAt})>[];
     setState(() {
       _countdownStates.updateAll(
         (String id, _CountdownBatchState state) {
@@ -252,7 +256,7 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
           if (nextRemaining == 0) {
             final CreatedTimer? timer = timersById[id];
             if (timer != null) {
-              completed.add(timer);
+              completed.add((timer: timer, endAt: state.endAt!));
             }
             return state.copyWith(
               remainingSeconds: state.initialSeconds,
@@ -275,7 +279,8 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
       }
     });
     _syncTicker();
-    for (final CreatedTimer timer in completed) {
+    for (final ({CreatedTimer timer, DateTime endAt}) entry in completed) {
+      final CreatedTimer timer = entry.timer;
       _notificationStatuses.remove(timer.id);
       if (widget.settings.completionReminderName != TimerSettings.reminderOff) {
         unawaited(widget.notifications.completeCountdown(
@@ -286,6 +291,11 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
         ));
       } else {
         _cancelCountdown(timer.id);
+      }
+      if (widget.settings.completionReminderName ==
+          TimerSettings.reminderSoundAndVibration) {
+        unawaited(widget.vibration
+            .vibrateCountdownComplete(endAt: entry.endAt, now: now));
       }
     }
   }

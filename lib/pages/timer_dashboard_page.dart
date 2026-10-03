@@ -8,6 +8,7 @@ import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
 import '../services/timer_foreground_service.dart';
 import '../services/timer_notifications.dart';
+import '../services/timer_vibration.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../utils/time_format.dart';
@@ -1018,6 +1019,7 @@ class TimerSession extends ChangeNotifier {
     required this.onCompleted,
     this.notifications = const DisabledTimerNotificationScheduler(),
     this.foregroundService = const DisabledTimerForegroundService(),
+    this.vibration = const AndroidTimerVibration(),
     DateTime Function()? now,
     String? notificationKey,
   })  : notificationKey = notificationKey ??
@@ -1040,6 +1042,7 @@ class TimerSession extends ChangeNotifier {
   final Future<void> Function(TimerHistoryEntry entry) onCompleted;
   final TimerNotificationScheduler notifications;
   final TimerForegroundService foregroundService;
+  final TimerVibration vibration;
   final String notificationKey;
 
   static int _nextNotificationKey = 0;
@@ -1323,6 +1326,7 @@ class TimerSession extends ChangeNotifier {
     if (_completed) {
       return;
     }
+    final DateTime endAt = countdownEndAt ?? _now();
     _completed = true;
     _hasCompletedCountdown = true;
     _durationAtRunStart = Duration.zero;
@@ -1339,6 +1343,10 @@ class TimerSession extends ChangeNotifier {
       ));
     } else {
       unawaited(notifications.cancelCountdownComplete(notificationKey));
+    }
+    if (settings.completionReminderName ==
+        TimerSettings.reminderSoundAndVibration) {
+      unawaited(vibration.vibrateCountdownComplete(endAt: endAt, now: _now()));
     }
     await foregroundService.stop();
     if (settings.completionSoundEnabled &&

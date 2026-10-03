@@ -4,6 +4,7 @@ import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
 import '../services/timer_foreground_service.dart';
 import '../services/timer_notifications.dart';
+import '../services/timer_vibration.dart';
 import '../theme/app_theme.dart';
 import '../widgets/animated_tab_stack.dart';
 import '../widgets/app_bottom_nav.dart';
@@ -21,6 +22,7 @@ class HomeShell extends StatefulWidget {
     required this.audio,
     required this.notifications,
     required this.foregroundService,
+    required this.vibration,
     this.now,
     required this.paletteIndex,
     required this.onPaletteChanged,
@@ -38,6 +40,7 @@ class HomeShell extends StatefulWidget {
   final TimerAudio audio;
   final TimerNotificationScheduler notifications;
   final TimerForegroundService foregroundService;
+  final TimerVibration vibration;
   final DateTime Function()? now;
   final int paletteIndex;
   final ValueChanged<int> onPaletteChanged;
@@ -89,6 +92,7 @@ class _HomeShellState extends State<HomeShell> {
                     widget.snapshot.settings.defaultCountdownSeconds,
                 settings: widget.snapshot.settings,
                 notifications: widget.notifications,
+                vibration: widget.vibration,
                 now: widget.now,
                 onCreateTimer: widget.onCreateTimer,
                 onDeleteTimer: widget.onDeleteTimer,
@@ -127,6 +131,7 @@ class _HomeShellState extends State<HomeShell> {
       audio: widget.audio,
       notifications: widget.notifications,
       foregroundService: widget.foregroundService,
+      vibration: widget.vibration,
       now: widget.now,
       onSettingsChanged: widget.onSettingsChanged,
       onCompleted: widget.onHistoryEntry,

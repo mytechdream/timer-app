@@ -5,6 +5,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'timer_vibration.dart';
+
 abstract class TimerNotificationScheduler {
   Future<void> initialize();
 
@@ -69,7 +71,9 @@ class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
       : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   static const String _soundChannelId = 'timer_alerts_sound';
-  static const String _vibrationChannelId = 'timer_alerts_vibration';
+  // Android freezes a channel's vibration configuration on first creation.
+  // Use a versioned channel so existing installs receive the explicit waveform.
+  static const String _vibrationChannelId = 'timer_alerts_vibration_v2';
 
   final FlutterLocalNotificationsPlugin _plugin;
   final Set<String> _scheduledKeys = <String>{};
@@ -266,6 +270,11 @@ class LocalTimerNotificationScheduler implements TimerNotificationScheduler {
           priority: Priority.high,
           playSound: true,
           enableVibration: vibrate,
+          vibrationPattern:
+              vibrate ? Int64List.fromList(countdownVibrationPattern) : null,
+          audioAttributesUsage: vibrate
+              ? AudioAttributesUsage.alarm
+              : AudioAttributesUsage.notification,
           category: AndroidNotificationCategory.alarm,
         ),
         iOS: const DarwinNotificationDetails(

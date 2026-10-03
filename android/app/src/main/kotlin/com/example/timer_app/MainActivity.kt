@@ -12,6 +12,9 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "timer_app/vibration")
+            .setMethodCallHandler(TimerVibrationHandler(applicationContext))
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
