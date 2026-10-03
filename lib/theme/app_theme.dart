@@ -58,6 +58,13 @@ class AppTheme {
       background: Color(0xFFFFFAEF),
       surface: Color(0xFFFFFFFF),
     ),
+    TimerPalette(
+      name: '番茄红',
+      primary: Color(0xFFC4312C),
+      soft: Color(0xFFFFECE8),
+      background: Color(0xFFFFF7F4),
+      surface: Color(0xFFFFFFFF),
+    ),
   ];
 
   static ThemeData build(TimerPalette palette) {

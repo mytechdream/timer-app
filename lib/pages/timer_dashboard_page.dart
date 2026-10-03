@@ -8,6 +8,7 @@ import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
 import '../services/timer_foreground_service.dart';
 import '../services/timer_notifications.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../utils/time_format.dart';
 import '../widgets/app_page.dart';
@@ -16,6 +17,7 @@ import '../widgets/duration_picker_card.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/segmented_pill.dart';
 import '../widgets/timer_bubbles.dart';
+import '../widgets/timer_progress_builder.dart';
 
 class TimerDashboardPage extends StatefulWidget {
   const TimerDashboardPage({
@@ -135,7 +137,32 @@ class _TimerDashboardPageState extends State<TimerDashboardPage> {
             ),
             const SizedBox(height: 24),
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
+              duration: AppMotion.duration(context, AppMotion.pageEnter),
+              reverseDuration: AppMotion.duration(context, AppMotion.pageExit),
+              switchInCurve: AppMotion.curve,
+              switchOutCurve: Curves.easeInCubic,
+              layoutBuilder: (Widget? current, List<Widget> previous) => Stack(
+                alignment: Alignment.topCenter,
+                children: <Widget>[
+                  for (final Widget child in previous)
+                    IgnorePointer(
+                      child:
+                          ExcludeSemantics(child: ExcludeFocus(child: child)),
+                    ),
+                  if (current != null) current,
+                ],
+              ),
+              transitionBuilder: (Widget child, Animation<double> animation) =>
+                  FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.015),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              ),
               child: _modeIndex == 0 ? _buildCountdown() : _buildStopwatch(),
             ),
           ],
@@ -322,9 +349,6 @@ class _RunningTimerPageState extends State<RunningTimerPage> {
   @override
   Widget build(BuildContext context) {
     final Color primary = Theme.of(context).colorScheme.primary;
-    final double progress = _isCountdown && _session.initialSeconds > 0
-        ? _session.displaySeconds / _session.initialSeconds
-        : 0;
     final Widget timeFace = Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: <Widget>[
@@ -416,10 +440,19 @@ class _RunningTimerPageState extends State<RunningTimerPage> {
                     width: 292,
                     height: 292,
                     child: _isCountdown
-                        ? CustomPaint(
-                            painter: _TimerRingPainter(
-                              color: primary,
-                              progress: progress.clamp(0, 1),
+                        ? TimerProgressBuilder(
+                            progress: () => _session.countdownProgress,
+                            running: _session.running,
+                            builder: (BuildContext context, double progress,
+                                    Widget? child) =>
+                                RepaintBoundary(
+                              child: CustomPaint(
+                                painter: _TimerRingPainter(
+                                  color: primary,
+                                  progress: progress,
+                                ),
+                                child: child,
+                              ),
                             ),
                             child: timeFace,
                           )
@@ -743,22 +776,34 @@ class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
   Widget build(BuildContext context) {
     final Color primary = Theme.of(context).colorScheme.primary;
     final bool isCountdown = _session.mode == TimerRunMode.countdown;
-    final double progress = isCountdown && _session.initialSeconds > 0
-        ? _session.displaySeconds / _session.initialSeconds
-        : 0;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: <Widget>[
           Positioned.fill(
-            child: CustomPaint(
-              painter: _FullscreenTimerPainter(
-                color: primary,
-                progress: progress.clamp(0.0, 1.0).toDouble(),
+            child: RepaintBoundary(
+              child: CustomPaint(
+                painter: _FullscreenTimerPainter(color: primary),
               ),
             ),
           ),
+          if (isCountdown)
+            Positioned.fill(
+              child: TimerProgressBuilder(
+                progress: () => _session.countdownProgress,
+                running: _session.running,
+                builder: (BuildContext context, double progress, _) =>
+                    RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _FullscreenProgressPainter(
+                      color: primary,
+                      progress: progress,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(32, 20, 32, 28),
@@ -844,13 +889,20 @@ class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
                     ),
                   ),
                   if (isCountdown)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        minHeight: 10,
-                        backgroundColor: Colors.white.withOpacity(0.12),
-                        value: progress.clamp(0.0, 1.0).toDouble(),
-                        valueColor: AlwaysStoppedAnimation<Color>(primary),
+                    TimerProgressBuilder(
+                      progress: () => _session.countdownProgress,
+                      running: _session.running,
+                      builder: (BuildContext context, double progress, _) =>
+                          RepaintBoundary(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            minHeight: 10,
+                            backgroundColor: Colors.white.withOpacity(0.12),
+                            value: progress,
+                            valueColor: AlwaysStoppedAnimation<Color>(primary),
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -902,10 +954,9 @@ class _FullscreenIconButton extends StatelessWidget {
 }
 
 class _FullscreenTimerPainter extends CustomPainter {
-  const _FullscreenTimerPainter({required this.color, required this.progress});
+  const _FullscreenTimerPainter({required this.color});
 
   final Color color;
-  final double progress;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -923,12 +974,6 @@ class _FullscreenTimerPainter extends CustomPainter {
       ).createShader(screen);
     canvas.drawRect(screen, wash);
 
-    final Paint progressWash = Paint()
-      ..color = color.withOpacity(0.16)
-      ..style = PaintingStyle.fill;
-    final double sweepWidth = size.width * progress;
-    canvas.drawRect(Rect.fromLTWH(0, 0, sweepWidth, size.height), progressWash);
-
     final Paint glow = Paint()
       ..color = color.withOpacity(0.24)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 48);
@@ -938,8 +983,28 @@ class _FullscreenTimerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FullscreenTimerPainter oldDelegate) {
-    return oldDelegate.color != color || oldDelegate.progress != progress;
+    return oldDelegate.color != color;
   }
+}
+
+class _FullscreenProgressPainter extends CustomPainter {
+  const _FullscreenProgressPainter(
+      {required this.color, required this.progress});
+
+  final Color color;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width * progress, size.height),
+      Paint()..color = color.withOpacity(0.16),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _FullscreenProgressPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.progress != progress;
 }
 
 class TimerSession extends ChangeNotifier {
@@ -960,7 +1025,7 @@ class TimerSession extends ChangeNotifier {
         displaySeconds = mode == TimerRunMode.countdown ? initialSeconds : 0 {
     _now = now ?? DateTime.now;
     _runStartedAt = _now();
-    _secondsAtRunStart = displaySeconds;
+    _durationAtRunStart = Duration(seconds: displaySeconds);
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     unawaited(_scheduleCountdownNotification());
     unawaited(_updateForegroundService());
@@ -989,9 +1054,31 @@ class TimerSession extends ChangeNotifier {
   Timer? _ticker;
   late final DateTime Function() _now;
   DateTime? _runStartedAt;
-  int _secondsAtRunStart = 0;
+  Duration _durationAtRunStart = Duration.zero;
 
   bool get _isCountdown => mode == TimerRunMode.countdown;
+
+  Duration get _currentDuration {
+    if (!running || _completed || _runStartedAt == null) {
+      return _durationAtRunStart;
+    }
+    final Duration elapsed = _now().difference(_runStartedAt!);
+    final Duration safeElapsed = elapsed.isNegative ? Duration.zero : elapsed;
+    final Duration duration = _isCountdown
+        ? _durationAtRunStart - safeElapsed
+        : _durationAtRunStart + safeElapsed;
+    return duration.isNegative ? Duration.zero : duration;
+  }
+
+  double get countdownProgress {
+    if (!_isCountdown || initialSeconds <= 0) {
+      return 0;
+    }
+    return (_currentDuration.inMicroseconds /
+            (initialSeconds * Duration.microsecondsPerSecond))
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
 
   String? get reminderWarning {
     if (!_isCountdown ||
@@ -1016,7 +1103,7 @@ class TimerSession extends ChangeNotifier {
     if (!_isCountdown || !running || _runStartedAt == null) {
       return null;
     }
-    return _runStartedAt!.add(Duration(seconds: _secondsAtRunStart));
+    return _runStartedAt!.add(_durationAtRunStart);
   }
 
   void toggleRunning() {
@@ -1025,15 +1112,16 @@ class TimerSession extends ChangeNotifier {
       return;
     }
 
+    final Duration duration = _currentDuration;
     _syncDisplay();
     if (_completed) {
       return;
     }
     running = !running;
+    _durationAtRunStart = duration;
     if (running) {
       _hasCompletedCountdown = false;
       _runStartedAt = _now();
-      _secondsAtRunStart = displaySeconds;
       _ensureTicker();
       unawaited(_scheduleCountdownNotification());
       unawaited(_updateForegroundService());
@@ -1089,7 +1177,7 @@ class TimerSession extends ChangeNotifier {
     running = true;
     _completed = false;
     _runStartedAt = _now();
-    _secondsAtRunStart = displaySeconds;
+    _durationAtRunStart = Duration(seconds: displaySeconds);
     _ensureTicker();
     unawaited(_scheduleCountdownNotification());
     unawaited(_updateForegroundService());
@@ -1104,8 +1192,10 @@ class TimerSession extends ChangeNotifier {
     if (_completed) {
       return;
     }
-    displaySeconds += seconds;
-    _secondsAtRunStart = displaySeconds;
+    _durationAtRunStart = _currentDuration + Duration(seconds: seconds);
+    displaySeconds =
+        (_durationAtRunStart.inMicroseconds / Duration.microsecondsPerSecond)
+            .ceil();
     if (running) {
       _runStartedAt = _now();
     }
@@ -1119,6 +1209,7 @@ class TimerSession extends ChangeNotifier {
     if (_isCountdown || displaySeconds <= 0 || _completed) {
       return;
     }
+    _durationAtRunStart = _currentDuration;
     _completed = true;
     running = false;
     _runStartedAt = null;
@@ -1161,13 +1252,10 @@ class TimerSession extends ChangeNotifier {
     if (!running || _completed || _runStartedAt == null) {
       return;
     }
-    final int elapsedSeconds = math.max(
-      0,
-      _now().difference(_runStartedAt!).inSeconds,
-    );
+    final Duration duration = _currentDuration;
     final int nextDisplaySeconds = _isCountdown
-        ? math.max(0, _secondsAtRunStart - elapsedSeconds)
-        : _secondsAtRunStart + elapsedSeconds;
+        ? (duration.inMicroseconds / Duration.microsecondsPerSecond).ceil()
+        : duration.inSeconds;
     displaySeconds = nextDisplaySeconds;
     if (_isCountdown && nextDisplaySeconds == 0) {
       unawaited(_completeCountdown());
@@ -1199,7 +1287,7 @@ class TimerSession extends ChangeNotifier {
         await notifications.scheduleCountdownComplete(
       notificationKey: notificationKey,
       timerName: name,
-      endAt: _now().add(Duration(seconds: displaySeconds)),
+      endAt: countdownEndAt!,
       vibrate: settings.completionReminderName ==
           TimerSettings.reminderSoundAndVibration,
       preferExact: true,
@@ -1237,6 +1325,7 @@ class TimerSession extends ChangeNotifier {
     }
     _completed = true;
     _hasCompletedCountdown = true;
+    _durationAtRunStart = Duration.zero;
     _clearNotificationStatus();
     _runStartedAt = null;
     _ticker?.cancel();
@@ -1266,7 +1355,7 @@ class TimerSession extends ChangeNotifier {
       ),
     );
     displaySeconds = initialSeconds;
-    _secondsAtRunStart = displaySeconds;
+    _durationAtRunStart = Duration(seconds: displaySeconds);
     running = false;
     _completed = false;
     notifyListeners();

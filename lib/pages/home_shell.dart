@@ -5,6 +5,7 @@ import '../services/timer_audio.dart';
 import '../services/timer_foreground_service.dart';
 import '../services/timer_notifications.dart';
 import '../theme/app_theme.dart';
+import '../widgets/animated_tab_stack.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'batch_timer_page.dart';
 import 'create_timer_page.dart';
@@ -63,7 +64,7 @@ class _HomeShellState extends State<HomeShell> {
       backgroundColor: context.timerPalette.background,
       body: Stack(
         children: <Widget>[
-          IndexedStack(
+          AnimatedTabStack(
             index: _pageIndex,
             children: <Widget>[
               TimerDashboardPage(

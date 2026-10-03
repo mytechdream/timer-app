@@ -211,13 +211,18 @@ class _DurationWheel extends StatelessWidget {
             onSelectedItemChanged: onChanged,
             childCount: max + 1,
             itemBuilder: (BuildContext context, int index) {
-              return const SizedBox.expand();
+              return Semantics(
+                label: '$index $unit',
+                child: const SizedBox.expand(),
+              );
             },
           ),
         ),
         Positioned.fill(
           child: IgnorePointer(
-            child: _WheelReadout(value: value, max: max, unit: unit),
+            child: ExcludeSemantics(
+              child: _WheelReadout(value: value, max: max, unit: unit),
+            ),
           ),
         ),
       ],
@@ -238,33 +243,60 @@ class _WheelReadout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
+    // Every row shares one numeric lane. Unit labels must not participate in
+    // centering the selected digits, or they drift away from adjacent rows.
+    return Row(
       children: <Widget>[
-        _WheelCandidate(
-          number: value - 2,
-          max: max,
-          offsetY: -86,
-          opacity: 0.30,
+        Expanded(
+          flex: 3,
+          child: Stack(
+            alignment: Alignment.center,
+            children: <Widget>[
+              _WheelCandidate(
+                number: value - 2,
+                max: max,
+                offsetY: -86,
+                opacity: 0.30,
+              ),
+              _WheelCandidate(
+                number: value - 1,
+                max: max,
+                offsetY: -48,
+                opacity: 0.44,
+              ),
+              _WheelText(number: value, unit: unit, selected: true),
+              _WheelCandidate(
+                number: value + 1,
+                max: max,
+                offsetY: 58,
+                opacity: 0.44,
+              ),
+              _WheelCandidate(
+                number: value + 2,
+                max: max,
+                offsetY: 96,
+                opacity: 0.30,
+              ),
+            ],
+          ),
         ),
-        _WheelCandidate(
-          number: value - 1,
-          max: max,
-          offsetY: -48,
-          opacity: 0.44,
-        ),
-        _WheelText(number: value, unit: unit, selected: true),
-        _WheelCandidate(
-          number: value + 1,
-          max: max,
-          offsetY: 58,
-          opacity: 0.44,
-        ),
-        _WheelCandidate(
-          number: value + 2,
-          max: max,
-          offsetY: 96,
-          opacity: 0.30,
+        Expanded(
+          flex: 2,
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                unit,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: AppTheme.ink,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -312,27 +344,30 @@ class _WheelText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final TextStyle textStyle = TextStyle(
+      color: AppTheme.ink.withOpacity(opacity),
+      fontFamilyFallback: const <String>[
+        'Microsoft YaHei',
+        'PingFang SC',
+        'Noto Sans CJK SC',
+        'Noto Sans SC',
+        'Arial Unicode MS',
+        'sans-serif',
+      ],
+      fontSize: 28,
+      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+      fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
+      height: 1,
+    );
     return Center(
       child: FittedBox(
         fit: BoxFit.scaleDown,
         child: Text(
-          selected ? '$number $unit' : '$number',
+          '$number',
+          semanticsLabel: selected ? '$number $unit' : null,
           maxLines: 1,
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppTheme.ink.withOpacity(opacity),
-            fontFamilyFallback: const <String>[
-              'Microsoft YaHei',
-              'PingFang SC',
-              'Noto Sans CJK SC',
-              'Noto Sans SC',
-              'Arial Unicode MS',
-              'sans-serif',
-            ],
-            fontSize: 28,
-            fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
-            height: 1,
-          ),
+          style: textStyle,
         ),
       ),
     );

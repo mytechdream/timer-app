@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../theme/app_motion.dart';
 
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({
@@ -22,10 +23,14 @@ class AppBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color primary = Theme.of(context).colorScheme.primary;
+    final double barHeight =
+        (64 + MediaQuery.textScalerOf(context).scale(13) * 1.5)
+            .clamp(84.0, double.infinity)
+            .toDouble();
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(20, 0, 20, 14),
       child: Container(
-        height: 84,
+        height: barHeight,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.96),
@@ -38,17 +43,44 @@ class AppBottomNav extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
+        child: Stack(
           children: <Widget>[
-            for (int i = 0; i < _items.length; i++)
-              Expanded(
-                child: _NavButton(
-                  item: _items[i],
-                  active: i == index,
-                  activeColor: primary,
-                  onTap: () => onChanged(i),
+            Positioned.fill(
+              child: AnimatedAlign(
+                key: const ValueKey<String>('bottom-nav-indicator'),
+                alignment: AlignmentDirectional(
+                    -1 + 2 * index / (_items.length - 1), 0),
+                duration: AppMotion.duration(context, AppMotion.selection),
+                curve: AppMotion.curve,
+                child: FractionallySizedBox(
+                  widthFactor: 1 / _items.length,
+                  heightFactor: 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: primary.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(26),
+                    ),
+                  ),
                 ),
               ),
+            ),
+            Row(
+              children: <Widget>[
+                for (int i = 0; i < _items.length; i++)
+                  Expanded(
+                    child: _NavButton(
+                      item: _items[i],
+                      active: i == index,
+                      activeColor: primary,
+                      onTap: () {
+                        if (i != index) {
+                          onChanged(i);
+                        }
+                      },
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
       ),
@@ -79,38 +111,50 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: item.label,
-      child: Material(
-        color: active ? activeColor.withOpacity(0.12) : Colors.transparent,
-        borderRadius: BorderRadius.circular(26),
-        child: InkWell(
+    return Semantics(
+      selected: active,
+      button: true,
+      child: Tooltip(
+        message: item.label,
+        child: Material(
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(26),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(
-                  active ? item.activeIcon : item.icon,
-                  size: 28,
-                  color: active ? activeColor : AppTheme.ink,
-                ),
-                const SizedBox(height: 4),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: active ? activeColor : AppTheme.ink,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(26),
+            onTap: onTap,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: active ? 1 : 0, end: active ? 1 : 0),
+              duration: AppMotion.duration(context, AppMotion.feedback),
+              curve: AppMotion.curve,
+              builder: (BuildContext context, double value, _) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Transform.scale(
+                      scale: 1 + 0.06 * value,
+                      child: Icon(
+                        active ? item.activeIcon : item.icon,
+                        size: 28,
+                        color: Color.lerp(AppTheme.ink, activeColor, value),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: Color.lerp(AppTheme.ink, activeColor, value),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

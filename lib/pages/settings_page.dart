@@ -278,49 +278,54 @@ class _PaletteChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final BorderRadius radius = BorderRadius.circular(24);
-    return Material(
-      color: Colors.white,
-      borderRadius: radius,
-      child: InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: Colors.white,
         borderRadius: radius,
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: selected ? palette.primary.withOpacity(0.10) : Colors.white,
-            borderRadius: radius,
-            border: Border.all(
-              color: selected ? palette.primary : AppTheme.divider,
-              width: selected ? 2 : 1.5,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(
+              color:
+                  selected ? palette.primary.withOpacity(0.10) : Colors.white,
+              borderRadius: radius,
+              border: Border.all(
+                color: selected ? palette.primary : AppTheme.divider,
+                width: selected ? 2 : 1.5,
+              ),
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: palette.primary,
-                  shape: BoxShape.circle,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: palette.primary,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                palette.name,
-                style: const TextStyle(
-                  color: AppTheme.ink,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              if (selected) ...<Widget>[
                 const SizedBox(width: 10),
-                Icon(Icons.check_circle_rounded,
-                    color: palette.primary, size: 22),
+                Text(
+                  palette.name,
+                  style: const TextStyle(
+                    color: AppTheme.ink,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (selected) ...<Widget>[
+                  const SizedBox(width: 10),
+                  Icon(Icons.check_circle_rounded,
+                      color: palette.primary, size: 22),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

@@ -125,6 +125,36 @@ void main() {
     }
   });
 
+  test(
+      'notification deadlines retain subsecond progress after rename and pause',
+      () async {
+    final DateTime startedAt = DateTime(2026, 10, 3, 10);
+    DateTime now = startedAt;
+    final _RecordingNotifications notifications = _RecordingNotifications();
+    final TimerSession session = TimerSession(
+      mode: TimerRunMode.countdown,
+      name: '专注',
+      initialSeconds: 10,
+      settings: const TimerSettings(),
+      audio: const SilentTimerAudio(),
+      notifications: notifications,
+      onSettingsChanged: (_) async {},
+      onCompleted: (_) async {},
+      now: () => now,
+    );
+    addTearDown(session.dispose);
+
+    now = startedAt.add(const Duration(milliseconds: 1250));
+    session.rename('新名称');
+    expect(notifications.scheduled.last.endAt,
+        startedAt.add(const Duration(seconds: 10)));
+    session.toggleRunning();
+    now = startedAt.add(const Duration(seconds: 5));
+    session.toggleRunning();
+    expect(notifications.scheduled.last.endAt,
+        startedAt.add(const Duration(milliseconds: 13750)));
+  });
+
   testWidgets('batch countdowns have independent reminders and catch up',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(430, 932);

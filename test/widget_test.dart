@@ -76,6 +76,13 @@ Future<void> openHistoryPage(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+// A running countdown now paints continuously and intentionally never settles.
+// Advance only the finite dialog/sheet transition, not the whole countdown.
+Future<void> pumpRunningTimerUi(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
 void main() {
   test('timer session catches up from timestamps after a missed tick', () {
     final DateTime start = DateTime(2026, 9, 18, 9, 0);
@@ -298,15 +305,15 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     tester.widget<IconButton>(iconButtonWithTooltip('关闭')).onPressed?.call();
-    await tester.pumpAndSettle();
+    await pumpRunningTimerUi(tester);
     expect(find.text('退出计时？'), findsOneWidget);
 
     await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
+    await pumpRunningTimerUi(tester);
     expect(find.text('24:59'), findsOneWidget);
 
     tester.widget<IconButton>(iconButtonWithTooltip('关闭')).onPressed?.call();
-    await tester.pumpAndSettle();
+    await pumpRunningTimerUi(tester);
     await tester.tap(find.widgetWithText(FilledButton, '退出'));
     await tester.pumpAndSettle();
     expect(find.text('选择倒计时时长'), findsOneWidget);
@@ -339,7 +346,7 @@ void main() {
     expect(find.text('24:58'), findsOneWidget);
 
     tester.widget<IconButton>(iconButtonWithTooltip('编辑标签')).onPressed?.call();
-    await tester.pumpAndSettle();
+    await pumpRunningTimerUi(tester);
     expect(find.text('修改标签'), findsOneWidget);
     await tester.enterText(find.byType(TextField).last, '专注');
     await tester.pump();
@@ -347,7 +354,7 @@ void main() {
         .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, '保存'))
         .onPressed
         ?.call();
-    await tester.pumpAndSettle();
+    await pumpRunningTimerUi(tester);
     expect(find.text('专注'), findsOneWidget);
 
     final int ticksBeforeMute = audio.tickCount;
@@ -355,7 +362,7 @@ void main() {
         .widget<IconButton>(iconButtonWithTooltip('关闭滴答声音'))
         .onPressed
         ?.call();
-    await tester.pumpAndSettle();
+    await pumpRunningTimerUi(tester);
     expect((await repository.load()).settings.tickSoundEnabled, isFalse);
     expect(iconButtonWithTooltip('开启滴答声音'), findsOneWidget);
     expect(find.byIcon(Icons.volume_off_rounded), findsOneWidget);
@@ -364,7 +371,7 @@ void main() {
     expect(audio.tickCount, ticksBeforeMute);
 
     await tester.tap(find.text('全屏'));
-    await tester.pumpAndSettle();
+    await pumpRunningTimerUi(tester);
     expect(find.byTooltip('关闭全屏'), findsOneWidget);
     expect(
       find.byWidgetPredicate(
@@ -377,7 +384,7 @@ void main() {
     expect(find.byTooltip('重置'), findsNothing);
     expect(find.byIcon(Icons.replay_rounded), findsNothing);
     tester.widget<IconButton>(iconButtonWithTooltip('关闭全屏')).onPressed?.call();
-    await tester.pumpAndSettle();
+    await pumpRunningTimerUi(tester);
   });
 
   testWidgets('starts stopwatch mode separately from countdown',
