@@ -86,136 +86,49 @@ class _TimerAppState extends State<TimerApp> {
     await widget.repository.save(snapshot);
   }
 
-  Future<void> _createTimer(String name, int seconds) async {
+  Future<void> _updateCollection(
+    TimerCollectionScope scope,
+    TimerCollection Function(TimerCollection collection) update,
+  ) async {
     final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
+    final TimerCollection collection = snapshot.collection(scope);
+    final TimerCollection updated = update(collection);
+    if (identical(updated, collection)) {
+      return;
+    }
+    await _saveSnapshot(snapshot.withCollection(updated));
+  }
+
+  Future<void> _createTimer(
+      TimerCollectionScope scope, String name, int seconds) async {
     final CreatedTimer timer = CreatedTimer(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      id: '${scope.name}-${DateTime.now().microsecondsSinceEpoch}',
       name: name,
       seconds: seconds,
       createdAt: DateTime.now(),
     );
-    await _saveSnapshot(
-      snapshot.copyWith(timers: <CreatedTimer>[...snapshot.timers, timer]),
-    );
+    await _updateCollection(
+        scope, (TimerCollection collection) => collection.addTimer(timer));
   }
 
-  Future<void> _deleteTimer(String id) async {
-    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
-    if (TimerDefaults.isDefaultTimerId(id)) {
-      await _saveSnapshot(
-        snapshot.copyWith(
-          hiddenDefaultTimerIds: <String>{
-            ...snapshot.hiddenDefaultTimerIds,
-            id,
-          }.toList(),
-        ),
-      );
-      return;
-    }
+  Future<void> _deleteTimer(TimerCollectionScope scope, String id) =>
+      _updateCollection(
+          scope, (TimerCollection collection) => collection.deleteTimer(id));
 
-    await _saveSnapshot(
-      snapshot.copyWith(
-        timers: snapshot.timers
-            .where((CreatedTimer timer) => timer.id != id)
-            .toList(),
-      ),
-    );
-  }
+  Future<void> _createLabel(TimerCollectionScope scope, String label) =>
+      _updateCollection(
+          scope, (TimerCollection collection) => collection.addLabel(label));
 
-  Future<void> _createLabel(String label) async {
-    final String normalized = label.trim();
-    if (normalized.isEmpty) {
-      return;
-    }
+  Future<void> _renameLabel(
+          TimerCollectionScope scope, String oldLabel, String newLabel) =>
+      _updateCollection(
+          scope,
+          (TimerCollection collection) =>
+              collection.renameLabel(oldLabel, newLabel));
 
-    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
-    if (snapshot.labels.contains(normalized)) {
-      return;
-    }
-
-    if (TimerDefaults.isDefaultLabel(normalized)) {
-      if (!snapshot.hiddenDefaultLabels.contains(normalized)) {
-        return;
-      }
-      await _saveSnapshot(
-        snapshot.copyWith(
-          hiddenDefaultLabels: snapshot.hiddenDefaultLabels
-              .where((String label) => label != normalized)
-              .toList(),
-        ),
-      );
-      return;
-    }
-
-    await _saveSnapshot(
-      snapshot.copyWith(labels: <String>[...snapshot.labels, normalized]),
-    );
-  }
-
-  Future<void> _renameLabel(String oldLabel, String newLabel) async {
-    final String normalized = newLabel.trim();
-    if (normalized.isEmpty) {
-      return;
-    }
-
-    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
-    final List<String> labels = List<String>.of(snapshot.labels);
-    final List<String> hiddenDefaultLabels =
-        List<String>.of(snapshot.hiddenDefaultLabels);
-    final bool isStoredLabel = labels.contains(oldLabel);
-    final bool isDefaultLabel = TimerDefaults.isDefaultLabel(oldLabel);
-    final bool isVisibleDefaultLabel =
-        isDefaultLabel && !hiddenDefaultLabels.contains(oldLabel);
-    if (!isStoredLabel && !isVisibleDefaultLabel) {
-      return;
-    }
-    if (labels
-        .any((String label) => label == normalized && label != oldLabel)) {
-      return;
-    }
-    if (normalized != oldLabel &&
-        TimerDefaults.isDefaultLabel(normalized) &&
-        !hiddenDefaultLabels.contains(normalized)) {
-      return;
-    }
-
-    labels.removeWhere((String label) => label == oldLabel);
-    if (isDefaultLabel) {
-      hiddenDefaultLabels.add(oldLabel);
-    }
-    if (TimerDefaults.isDefaultLabel(normalized)) {
-      hiddenDefaultLabels.removeWhere((String label) => label == normalized);
-    } else {
-      labels.add(normalized);
-    }
-
-    await _saveSnapshot(
-      snapshot.copyWith(
-        labels: labels.toSet().toList(),
-        hiddenDefaultLabels: hiddenDefaultLabels.toSet().toList(),
-      ),
-    );
-  }
-
-  Future<void> _deleteLabel(String label) async {
-    final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();
-    final bool isStoredLabel = snapshot.labels.contains(label);
-    final bool isDefaultLabel = TimerDefaults.isDefaultLabel(label);
-    if (!isStoredLabel && !isDefaultLabel) {
-      return;
-    }
-
-    await _saveSnapshot(
-      snapshot.copyWith(
-        labels: snapshot.labels
-            .where((String existingLabel) => existingLabel != label)
-            .toList(),
-        hiddenDefaultLabels: isDefaultLabel
-            ? <String>{...snapshot.hiddenDefaultLabels, label}.toList()
-            : snapshot.hiddenDefaultLabels,
-      ),
-    );
-  }
+  Future<void> _deleteLabel(TimerCollectionScope scope, String label) =>
+      _updateCollection(
+          scope, (TimerCollection collection) => collection.deleteLabel(label));
 
   Future<void> _updateSettings(TimerSettings settings) async {
     final TimerSnapshot snapshot = _snapshot ?? TimerSnapshot.initial();

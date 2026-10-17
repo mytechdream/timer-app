@@ -109,14 +109,11 @@ class _BatchTimerPageState extends State<BatchTimerPage> {
   }
 
   Set<String> get _visibleLabels {
-    final Set<String> hiddenDefaultLabels = widget.hiddenDefaultLabels.toSet();
-    return <String>{
-      for (final String label in TimerDefaults.stopwatchLabels)
-        if (!hiddenDefaultLabels.contains(label)) label,
-      for (final String label in TimerDefaults.batchStopwatchLabels)
-        if (!hiddenDefaultLabels.contains(label)) label,
-      ...widget.labels,
-    };
+    return TimerCollection(
+      scope: TimerCollectionScope.batch,
+      labels: widget.labels,
+      hiddenDefaultLabels: widget.hiddenDefaultLabels,
+    ).visibleLabels;
   }
 
   bool get _isCountdownMode => _modeIndex == 0;

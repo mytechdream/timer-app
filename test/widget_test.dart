@@ -682,7 +682,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final snapshot = await repository.load();
-    expect(snapshot.labels, contains('cc'));
+    expect(snapshot.batch.labels, contains('cc'));
+    expect(snapshot.labels, isNot(contains('cc')));
     expect(find.text('批量计时'), findsWidgets);
     expect(find.text('cc'), findsOneWidget);
 
@@ -723,15 +724,18 @@ void main() {
       (WidgetTester tester) async {
     final repository = MemoryTimerRepository(
       TimerSnapshot.initial().copyWith(
-        timers: <CreatedTimer>[
-          CreatedTimer(
-            id: 'egg',
-            name: '煮鸡蛋',
-            seconds: 5 * 60,
-            createdAt: DateTime(2026, 9, 2),
-          ),
-        ],
-        labels: <String>['cc'],
+        batch: TimerCollection(
+          scope: TimerCollectionScope.batch,
+          timers: <CreatedTimer>[
+            CreatedTimer(
+              id: 'egg',
+              name: '煮鸡蛋',
+              seconds: 5 * 60,
+              createdAt: DateTime(2026, 9, 2),
+            ),
+          ],
+          labels: <String>['cc'],
+        ),
       ),
     );
     await pumpTimerApp(tester, repository);
@@ -747,7 +751,7 @@ void main() {
     await tester.pumpAndSettle();
 
     var snapshot = await repository.load();
-    expect(snapshot.timers, isEmpty);
+    expect(snapshot.batch.timers, isEmpty);
 
     await tester.tap(find.text('正计时'));
     await tester.pumpAndSettle();
@@ -761,7 +765,7 @@ void main() {
     await tester.pumpAndSettle();
 
     snapshot = await repository.load();
-    expect(snapshot.labels, isNot(contains('cc')));
+    expect(snapshot.batch.labels, isNot(contains('cc')));
   });
 
   testWidgets('batch delete selected also removes default timers and labels',
@@ -780,7 +784,9 @@ void main() {
     await tester.pumpAndSettle();
 
     var snapshot = await repository.load();
-    expect(snapshot.hiddenDefaultTimerIds, contains('default-batch-countdown'));
+    expect(snapshot.batch.hiddenDefaultTimerIds,
+        contains('default-batch-countdown'));
+    expect(snapshot.hiddenDefaultTimerIds, isEmpty);
     expect(find.text('新倒计时'), findsNothing);
 
     await tester.tap(find.text('正计时'));
@@ -795,7 +801,8 @@ void main() {
     await tester.pumpAndSettle();
 
     snapshot = await repository.load();
-    expect(snapshot.hiddenDefaultLabels, contains('新正计时'));
+    expect(snapshot.batch.hiddenDefaultLabels, contains('新正计时'));
+    expect(snapshot.hiddenDefaultLabels, isEmpty);
     expect(find.text('新正计时'), findsNothing);
   });
 

@@ -8,6 +8,7 @@ import '../models/timer_models.dart';
 import '../services/timer_audio.dart';
 import '../services/timer_foreground_service.dart';
 import '../services/timer_notifications.dart';
+import '../services/timer_screen_awake.dart';
 import '../services/timer_vibration.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
@@ -268,9 +269,14 @@ class _TimerDashboardPageState extends State<TimerDashboardPage> {
 }
 
 class RunningTimerPage extends StatefulWidget {
-  const RunningTimerPage({super.key, required this.session});
+  const RunningTimerPage({
+    super.key,
+    required this.session,
+    this.screenAwake = const AndroidTimerScreenAwake(),
+  });
 
   final TimerSession session;
+  final TimerScreenAwake screenAwake;
 
   @override
   State<RunningTimerPage> createState() => _RunningTimerPageState();
@@ -322,7 +328,10 @@ class _RunningTimerPageState extends State<RunningTimerPage> {
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
         pageBuilder: (BuildContext context, _, __) {
-          return _FullscreenTimerPage(session: _session);
+          return _FullscreenTimerPage(
+            session: _session,
+            screenAwake: widget.screenAwake,
+          );
         },
       ),
     );
@@ -729,9 +738,13 @@ class _RunningSheetInput extends StatelessWidget {
 }
 
 class _FullscreenTimerPage extends StatefulWidget {
-  const _FullscreenTimerPage({required this.session});
+  const _FullscreenTimerPage({
+    required this.session,
+    required this.screenAwake,
+  });
 
   final TimerSession session;
+  final TimerScreenAwake screenAwake;
 
   @override
   State<_FullscreenTimerPage> createState() => _FullscreenTimerPageState();
@@ -739,6 +752,7 @@ class _FullscreenTimerPage extends StatefulWidget {
 
 class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
   TimerSession get _session => widget.session;
+  bool? _screenAwakeEnabled;
 
   @override
   void initState() {
@@ -752,6 +766,7 @@ class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
         DeviceOrientation.landscapeRight,
       ]),
     );
+    unawaited(_setScreenAwake(!_session.hasCompletedCountdown));
   }
 
   @override
@@ -763,14 +778,24 @@ class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
         DeviceOrientation.portraitDown,
       ]),
     );
+    unawaited(_setScreenAwake(false));
     _session.removeListener(_onSessionChanged);
     super.dispose();
   }
 
   void _onSessionChanged() {
+    unawaited(_setScreenAwake(!_session.hasCompletedCountdown));
     if (mounted) {
       setState(() {});
     }
+  }
+
+  Future<void> _setScreenAwake(bool enabled) async {
+    if (_screenAwakeEnabled == enabled) {
+      return;
+    }
+    _screenAwakeEnabled = enabled;
+    await widget.screenAwake.setEnabled(enabled);
   }
 
   @override
@@ -828,6 +853,16 @@ class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
                               ),
                             ),
                             const SizedBox(height: 6),
+                            Text(
+                              _dateText(),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
                             Text(
                               isCountdown ? _endTimeText() : '正计时中',
                               style: const TextStyle(
@@ -922,6 +957,14 @@ class _FullscreenTimerPageState extends State<_FullscreenTimerPage> {
     final String hour = endTime.hour.toString().padLeft(2, '0');
     final String minute = endTime.minute.toString().padLeft(2, '0');
     return '结束于 $hour:$minute';
+  }
+
+  String _dateText() {
+    final DateTime date = _session.currentTime;
+    final String year = date.year.toString().padLeft(4, '0');
+    final String month = date.month.toString().padLeft(2, '0');
+    final String day = date.day.toString().padLeft(2, '0');
+    return '$year年$month月$day日';
   }
 }
 
@@ -1060,6 +1103,10 @@ class TimerSession extends ChangeNotifier {
   Duration _durationAtRunStart = Duration.zero;
 
   bool get _isCountdown => mode == TimerRunMode.countdown;
+
+  DateTime get currentTime => _now();
+
+  bool get hasCompletedCountdown => _hasCompletedCountdown;
 
   Duration get _currentDuration {
     if (!running || _completed || _runStartedAt == null) {

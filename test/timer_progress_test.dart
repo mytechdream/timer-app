@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:timer_app/models/timer_models.dart';
 import 'package:timer_app/pages/timer_dashboard_page.dart';
 import 'package:timer_app/services/timer_audio.dart';
+import 'package:timer_app/services/timer_screen_awake.dart';
 import 'package:timer_app/theme/app_theme.dart';
 import 'package:timer_app/widgets/timer_progress_builder.dart';
 
@@ -27,6 +28,15 @@ double _paintedProgress(WidgetTester tester, {int index = 0}) {
       .widget<ValueListenableBuilder<double>>(builder)
       .valueListenable
       .value;
+}
+
+class _RecordingScreenAwake implements TimerScreenAwake {
+  final List<bool> states = <bool>[];
+
+  @override
+  Future<void> setEnabled(bool enabled) async {
+    states.add(enabled);
+  }
 }
 
 void main() {
@@ -103,9 +113,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final TimerSession session = _session(tester.binding.clock.now);
+    final _RecordingScreenAwake screenAwake = _RecordingScreenAwake();
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.build(AppTheme.palettes[1]),
-      home: RunningTimerPage(session: session),
+      home: RunningTimerPage(session: session, screenAwake: screenAwake),
     ));
     await tester.pump();
     final double before = _paintedProgress(tester);
@@ -138,6 +149,15 @@ void main() {
                 find.byType(LinearProgressIndicator))
             .value,
         closeTo(session.countdownProgress, 0.000001));
+    final DateTime date = session.currentTime;
+    final String expectedDate = '${date.year.toString().padLeft(4, '0')}年'
+        '${date.month.toString().padLeft(2, '0')}月'
+        '${date.day.toString().padLeft(2, '0')}日';
+    expect(find.text(expectedDate), findsOneWidget);
+    expect(screenAwake.states, <bool>[true]);
+
+    await tester.pump(const Duration(seconds: 10));
+    expect(screenAwake.states, <bool>[true, false]);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());

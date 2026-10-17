@@ -31,7 +31,7 @@ class SettingsPage extends StatelessWidget {
       title: '设置',
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
       child: SingleChildScrollView(
-        clipBehavior: Clip.none,
+        clipBehavior: Clip.hardEdge,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -203,37 +203,39 @@ class SettingsPage extends StatelessWidget {
       ),
       builder: (BuildContext sheetContext) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 14),
-                for (final T option in options)
-                  ListTile(
-                    minVerticalPadding: 10,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      labelBuilder(option),
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(title, style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 14),
+                  for (final T option in options)
+                    ListTile(
+                      minVerticalPadding: 10,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        labelBuilder(option),
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
+                      trailing: option == selected
+                          ? Icon(
+                              Icons.check_circle_rounded,
+                              color: Theme.of(context).colorScheme.primary,
+                            )
+                          : null,
+                      onTap: () async {
+                        Navigator.of(sheetContext).pop();
+                        await onSelected(option);
+                      },
                     ),
-                    trailing: option == selected
-                        ? Icon(
-                            Icons.check_circle_rounded,
-                            color: Theme.of(context).colorScheme.primary,
-                          )
-                        : null,
-                    onTap: () async {
-                      Navigator.of(sheetContext).pop();
-                      await onSelected(option);
-                    },
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -350,6 +352,33 @@ class _SettingsRow extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showDivider;
 
+  static const TextStyle _titleStyle = TextStyle(
+    color: AppTheme.ink,
+    fontSize: 18,
+    fontWeight: FontWeight.w800,
+  );
+  static const TextStyle _valueStyle = TextStyle(
+    color: AppTheme.mutedInk,
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+  );
+
+  double _textWidth(BuildContext context, String text, TextStyle style) {
+    final TextPainter painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: DefaultTextStyle.of(context).style.merge(style),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 1,
+    )..layout();
+    final double width = painter.width.ceilToDouble();
+    painter.dispose();
+    return width;
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color primary = Theme.of(context).colorScheme.primary;
@@ -369,32 +398,38 @@ class _SettingsRow extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: AppTheme.ink,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final Widget label = Text(title, style: _titleStyle);
+                if (value == null) {
+                  return label;
+                }
+                final double inlineWidth =
+                    _textWidth(context, title, _titleStyle) +
+                        12 +
+                        _textWidth(context, value!, _valueStyle);
+                // Preserve the system font size and full labels. Reflow the
+                // selected value below its title when both cannot fit inline.
+                if (inlineWidth > constraints.maxWidth) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      label,
+                      const SizedBox(height: 4),
+                      Text(value!, style: _valueStyle),
+                    ],
+                  );
+                }
+                return Row(
+                  children: <Widget>[
+                    Expanded(child: label),
+                    const SizedBox(width: 12),
+                    Text(value!, style: _valueStyle),
+                  ],
+                );
+              },
             ),
           ),
-          if (value != null) ...<Widget>[
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 128,
-              child: Text(
-                value!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: const TextStyle(
-                  color: AppTheme.mutedInk,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
           if (trailing != null) trailing!,
           if (onTap != null) ...<Widget>[
             const SizedBox(width: 6),

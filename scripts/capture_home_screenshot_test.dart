@@ -1,19 +1,24 @@
 // Run manually: flutter test scripts/capture_home_screenshot_test.dart
 // Override SCREENSHOT_FONT / SCREENSHOT_BOLD_FONT with --dart-define on other OSes.
+// SCREENSHOT_PAGE=settings captures manual layout checks in build/ by default.
 import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:timer_app/app/timer_app.dart';
 import 'package:timer_app/data/timer_repository.dart';
+import 'package:timer_app/models/timer_models.dart';
+import 'package:timer_app/pages/settings_page.dart';
 import 'package:timer_app/services/timer_audio.dart';
 import 'package:timer_app/services/timer_foreground_service.dart';
 import 'package:timer_app/services/timer_notifications.dart';
 import 'package:timer_app/theme/app_theme.dart';
+import 'package:timer_app/widgets/app_bottom_nav.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -45,39 +50,96 @@ void main() {
     await icons.load();
   });
 
-  testWidgets('capture the current tomato-red home for the README',
+  testWidgets('capture the home or settings page with real Chinese fonts',
       (WidgetTester tester) async {
     final bool previousDisableShadows = debugDisableShadows;
     debugDisableShadows = false;
     try {
-      tester.view.physicalSize = const Size(750, 1624);
+      const bool captureSettings =
+          String.fromEnvironment('SCREENSHOT_PAGE') == 'settings';
+      const int width =
+          int.fromEnvironment('SCREENSHOT_WIDTH', defaultValue: 375);
+      const int height =
+          int.fromEnvironment('SCREENSHOT_HEIGHT', defaultValue: 812);
+      final double textScale = double.parse(const String.fromEnvironment(
+        'SCREENSHOT_TEXT_SCALE',
+        defaultValue: '1',
+      ));
+      tester.view.physicalSize = const Size(width * 2, height * 2);
       tester.view.devicePixelRatio = 2;
+      tester.platformDispatcher.textScaleFactorTestValue = textScale;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final GlobalKey screenshotKey = GlobalKey();
+      // Isolate settings typography from unrelated offstage preset-card layouts.
+      final Widget app = captureSettings
+          ? MaterialApp(
+              debugShowCheckedModeBanner: false,
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: const <Locale>[Locale('zh', 'CN')],
+              localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+                GlobalMaterialLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+              ],
+              theme: AppTheme.build(AppTheme.palettes[1]),
+              home: Scaffold(
+                body: Stack(
+                  children: <Widget>[
+                    SettingsPage(
+                      settings: const TimerSettings(),
+                      audio: const SilentTimerAudio(),
+                      selectedPaletteIndex: 1,
+                      onPaletteChanged: (_) {},
+                      onSettingsChanged: (_) async {},
+                    ),
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: AppBottomNav(index: 3, onChanged: (_) {}),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : TimerApp(
+              repository: MemoryTimerRepository(),
+              audio: const SilentTimerAudio(),
+              notifications: const DisabledTimerNotificationScheduler(),
+              foregroundService: const DisabledTimerForegroundService(),
+            );
       await tester.pumpWidget(RepaintBoundary(
         key: screenshotKey,
-        child: TimerApp(
-          repository: MemoryTimerRepository(),
-          audio: const SilentTimerAudio(),
-          notifications: const DisabledTimerNotificationScheduler(),
-          foregroundService: const DisabledTimerForegroundService(),
-        ),
+        child: app,
       ));
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.settings_outlined));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('番茄红'));
-      await tester.tap(find.text('番茄红'));
-      await tester.pumpAndSettle();
-      expect(find.text('当前配色：番茄红'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.timer_outlined));
-      await tester.pumpAndSettle();
-      expect(find.text('选择倒计时时长'), findsOneWidget);
-      expect(
-        Theme.of(tester.element(find.text('计时器'))).colorScheme.primary,
-        AppTheme.palettes.last.primary,
-      );
+      if (captureSettings) {
+        final Finder settingsPage = find.byType(SettingsPage);
+        final Finder scrollView = find.descendant(
+            of: settingsPage, matching: find.byType(SingleChildScrollView));
+        final ScrollableState scrollable = tester.state<ScrollableState>(
+            find.descendant(of: scrollView, matching: find.byType(Scrollable)));
+        final double scrollOffset = tester.getTopLeft(find.text('提醒')).dy -
+            20 -
+            tester.getTopLeft(scrollView).dy;
+        scrollable.position.jumpTo(
+            scrollOffset.clamp(0.0, scrollable.position.maxScrollExtent));
+        await tester.pumpAndSettle();
+      } else {
+        await tester.tap(find.byIcon(Icons.settings_outlined));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('番茄红'));
+        await tester.tap(find.text('番茄红'));
+        await tester.pumpAndSettle();
+        expect(find.text('当前配色：番茄红'), findsOneWidget);
+        await tester.tap(find.byIcon(Icons.timer_outlined));
+        await tester.pumpAndSettle();
+        expect(find.text('选择倒计时时长'), findsOneWidget);
+        expect(
+          Theme.of(tester.element(find.text('计时器'))).colorScheme.primary,
+          AppTheme.palettes.last.primary,
+        );
+      }
       expect(tester.takeException(), isNull);
 
       final RenderRepaintBoundary boundary = screenshotKey.currentContext!
@@ -88,9 +150,15 @@ void main() {
           final ByteData? png =
               await image.toByteData(format: ui.ImageByteFormat.png);
           if (png == null) {
-            throw StateError('Could not encode the README screenshot');
+            throw StateError('Could not encode the screenshot');
           }
-          await File('docs/screenshots/home.png').writeAsBytes(
+          const String outputPath = String.fromEnvironment(
+            'SCREENSHOT_OUTPUT',
+            defaultValue: captureSettings
+                ? 'build/settings-layout.png'
+                : 'docs/screenshots/home.png',
+          );
+          await File(outputPath).writeAsBytes(
             png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
             flush: true,
           );

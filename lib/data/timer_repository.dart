@@ -27,10 +27,14 @@ class MemoryTimerRepository implements TimerRepository {
 }
 
 class SqliteTimerRepository implements TimerRepository {
-  SqliteTimerRepository({String databaseName = 'timer_app.db'})
-      : _databaseName = databaseName;
+  SqliteTimerRepository({
+    String databaseName = 'timer_app.db',
+    DatabaseFactory? factory,
+  })  : _databaseName = databaseName,
+        _factory = factory;
 
   final String _databaseName;
+  final DatabaseFactory? _factory;
   Database? _database;
 
   Future<Database> get _db async {
@@ -39,15 +43,19 @@ class SqliteTimerRepository implements TimerRepository {
       return existing;
     }
 
-    final String dbPath = path.join(await getDatabasesPath(), _databaseName);
-    _database = await openDatabase(
+    final DatabaseFactory factory = _factory ?? databaseFactory;
+    final String dbPath =
+        path.join(await factory.getDatabasesPath(), _databaseName);
+    _database = await factory.openDatabase(
       dbPath,
-      version: 1,
-      onCreate: (Database db, int version) async {
-        await db.execute(
-          'CREATE TABLE app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
-        );
-      },
+      options: OpenDatabaseOptions(
+        version: 1,
+        onCreate: (Database db, int version) async {
+          await db.execute(
+            'CREATE TABLE app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+          );
+        },
+      ),
     );
     return _database!;
   }
@@ -72,9 +80,15 @@ class SqliteTimerRepository implements TimerRepository {
       return TimerSnapshot.initial();
     }
 
-    return TimerSnapshot.fromJson(
-      jsonDecode(encoded) as Map<String, Object?>,
-    );
+    final Map<String, Object?> json =
+        jsonDecode(encoded) as Map<String, Object?>;
+    final TimerSnapshot snapshot = TimerSnapshot.fromJson(json);
+    if (!json.containsKey('batch')) {
+      // Persist the one-time split immediately, including on read-only starts.
+      // Later empty batch lists must not be repopulated from the home page.
+      await save(snapshot);
+    }
+    return snapshot;
   }
 
   @override

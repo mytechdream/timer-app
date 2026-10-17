@@ -2,6 +2,7 @@ package com.example.timer_app
 
 import android.content.Intent
 import android.os.Build
+import android.view.WindowManager
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
@@ -14,6 +15,23 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "timer_app/vibration")
             .setMethodCallHandler(TimerVibrationHandler(applicationContext))
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "timer_app/screen_awake")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setKeepScreenOn" -> {
+                        val enabled = call.argument<Boolean>("enabled") ?: false
+                        if (enabled) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                        result.success(null)
+                    }
+
+                    else -> result.notImplemented()
+                }
+            }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->

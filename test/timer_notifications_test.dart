@@ -166,27 +166,30 @@ void main() {
     DateTime now = startedAt;
     final _RecordingNotifications notifications = _RecordingNotifications();
     final TimerSnapshot snapshot = TimerSnapshot.initial().copyWith(
-      hiddenDefaultTimerIds: <String>['default-batch-countdown'],
-      timers: <CreatedTimer>[
-        CreatedTimer(
-          id: 'a',
-          name: '甲',
-          seconds: 10,
-          createdAt: startedAt,
-        ),
-        CreatedTimer(
-          id: 'b',
-          name: '乙',
-          seconds: 20,
-          createdAt: startedAt,
-        ),
-        CreatedTimer(
-          id: 'c',
-          name: '丙',
-          seconds: 25,
-          createdAt: startedAt,
-        ),
-      ],
+      batch: TimerCollection(
+        scope: TimerCollectionScope.batch,
+        hiddenDefaultTimerIds: <String>['default-batch-countdown'],
+        timers: <CreatedTimer>[
+          CreatedTimer(
+            id: 'a',
+            name: '甲',
+            seconds: 10,
+            createdAt: startedAt,
+          ),
+          CreatedTimer(
+            id: 'b',
+            name: '乙',
+            seconds: 20,
+            createdAt: startedAt,
+          ),
+          CreatedTimer(
+            id: 'c',
+            name: '丙',
+            seconds: 25,
+            createdAt: startedAt,
+          ),
+        ],
+      ),
     );
     await tester.pumpWidget(TimerApp(
       repository: MemoryTimerRepository(snapshot),

@@ -205,6 +205,9 @@ class _DurationWheel extends StatelessWidget {
             itemExtent: 56,
             diameterRatio: 1.8,
             squeeze: 0.98,
+            // Keep the wheel's projection axis on the center of the 3:2
+            // numeric lane, so perspective does not shift digits sideways.
+            offAxisFraction: 0.2,
             useMagnifier: false,
             backgroundColor: Colors.transparent,
             selectionOverlay: const SizedBox.shrink(),
@@ -213,7 +216,22 @@ class _DurationWheel extends StatelessWidget {
             itemBuilder: (BuildContext context, int index) {
               return Semantics(
                 label: '$index $unit',
-                child: const SizedBox.expand(),
+                excludeSemantics: true,
+                // Render the digits in the scrolling viewport itself. An
+                // overlay driven by selectedItem loses all sub-item motion.
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      flex: 3,
+                      child: _WheelText(
+                        number: index,
+                        unit: unit,
+                        selected: index == value,
+                      ),
+                    ),
+                    const Spacer(flex: 2),
+                  ],
+                ),
               );
             },
           ),
@@ -221,110 +239,33 @@ class _DurationWheel extends StatelessWidget {
         Positioned.fill(
           child: IgnorePointer(
             child: ExcludeSemantics(
-              child: _WheelReadout(value: value, max: max, unit: unit),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _WheelReadout extends StatelessWidget {
-  const _WheelReadout({
-    required this.value,
-    required this.max,
-    required this.unit,
-  });
-
-  final int value;
-  final int max;
-  final String unit;
-
-  @override
-  Widget build(BuildContext context) {
-    // Every row shares one numeric lane. Unit labels must not participate in
-    // centering the selected digits, or they drift away from adjacent rows.
-    return Row(
-      children: <Widget>[
-        Expanded(
-          flex: 3,
-          child: Stack(
-            alignment: Alignment.center,
-            children: <Widget>[
-              _WheelCandidate(
-                number: value - 2,
-                max: max,
-                offsetY: -86,
-                opacity: 0.30,
-              ),
-              _WheelCandidate(
-                number: value - 1,
-                max: max,
-                offsetY: -48,
-                opacity: 0.44,
-              ),
-              _WheelText(number: value, unit: unit, selected: true),
-              _WheelCandidate(
-                number: value + 1,
-                max: max,
-                offsetY: 58,
-                opacity: 0.44,
-              ),
-              _WheelCandidate(
-                number: value + 2,
-                max: max,
-                offsetY: 96,
-                opacity: 0.30,
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          flex: 2,
-          child: Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                unit,
-                maxLines: 1,
-                style: const TextStyle(
-                  color: AppTheme.ink,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
-                ),
+              child: Row(
+                children: <Widget>[
+                  const Spacer(flex: 3),
+                  Expanded(
+                    flex: 2,
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          unit,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: AppTheme.ink,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _WheelCandidate extends StatelessWidget {
-  const _WheelCandidate({
-    required this.number,
-    required this.max,
-    required this.offsetY,
-    required this.opacity,
-  });
-
-  final int number;
-  final int max;
-  final double offsetY;
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    if (number < 0 || number > max) {
-      return const SizedBox.shrink();
-    }
-
-    return Transform.translate(
-      offset: Offset(0, offsetY),
-      child: _WheelText(number: number, opacity: opacity),
     );
   }
 }
@@ -334,18 +275,17 @@ class _WheelText extends StatelessWidget {
     required this.number,
     this.unit,
     this.selected = false,
-    this.opacity = 1,
   });
 
   final int number;
   final String? unit;
   final bool selected;
-  final double opacity;
 
   @override
   Widget build(BuildContext context) {
     final TextStyle textStyle = TextStyle(
-      color: AppTheme.ink.withOpacity(opacity),
+      color: AppTheme.ink,
+      fontFamily: Theme.of(context).textTheme.titleLarge?.fontFamily,
       fontFamilyFallback: const <String>[
         'Microsoft YaHei',
         'PingFang SC',
@@ -355,6 +295,7 @@ class _WheelText extends StatelessWidget {
         'sans-serif',
       ],
       fontSize: 28,
+      letterSpacing: 0,
       fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
       fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
       height: 1,
